@@ -1,8 +1,8 @@
-# ThreadSafeHitCounter Test Cases - Detailed Explanation
+# Test Cases - Detailed Explanation
 
 ## Overview
 
-The `ThreadSafeHitCounter` is a lock-free, thread-safe implementation of a hit counter that uses **atomic operations** and **Compare-And-Set (CAS)** to handle concurrent access without traditional locks. This test suite validates both functional correctness and thread-safety guarantees.
+The `ConcurrentHitCounter` is a lock-free, thread-safe implementation of a hit counter that uses **atomic operations** and **Compare-And-Set (CAS)** to handle concurrent access without traditional locks. This test suite validates both functional correctness and thread-safety guarantees.
 
 ## Implementation Key Concepts
 
@@ -519,7 +519,7 @@ public record Hit(int timestamp, int count) {}
 ## Running the Tests
 
 ```bash
-mvn test -Dtest=ThreadSafeHitCounterTest
+mvn test -Dtest=ConcurrentHitCounterTest
 ```
 
 ### Expected Behavior
@@ -536,7 +536,7 @@ mvn test -Dtest=ThreadSafeHitCounterTest
 
 ## Comparison: ThreadSafe vs Non-ThreadSafe
 
-| Aspect | HitCounter | ThreadSafeHitCounter |
+| Aspect | HitCounter | ConcurrentHitCounter |
 |--------|------------|----------------------|
 | **Thread-Safety** | ❌ Not thread-safe | ✅ Thread-safe |
 | **Concurrency** | Single-threaded only | Lock-free concurrent |
@@ -586,7 +586,7 @@ This test suite provides **comprehensive coverage** of:
 3. **Thread-safety** (concurrent access, race conditions)
 4. **Stress testing** (high load, many threads)
 
-The tests validate that `ThreadSafeHitCounter`:
+The tests validate that `ConcurrentHitCounter`:
 - ✅ Produces correct results
 - ✅ Handles concurrent access safely
 - ✅ Never loses updates
@@ -600,3 +600,441 @@ The tests validate that `ThreadSafeHitCounter`:
 - `CountDownLatch` for synchronization
 - `@RepeatedTest` for flaky bug detection
 - `CopyOnWriteArrayList` for thread-safe result collection
+
+---
+
+# Deduplicator Test Cases
+
+## Overview
+
+The `Deduplicator` (single-threaded) and `ConcurrentDeduplicator` (thread-safe) implement TTL-based deduplication using a HashMap with a ring of HashSet buckets. Tests verify time-based expiration, bucket management, and thread-safety.
+
+## Implementation Key Concepts
+
+### 1. **TTL-Based Expiration**
+- Keys expire after a configurable TTL (Time-To-Live) in seconds
+- Uses `timestamp % ttl` to map keys to buckets
+- Lazy expiry: keys older than TTL are treated as expired even before sweeper runs
+
+### 2. **Bucket Ring Structure**
+- Array of `ttl` HashSet buckets
+- Each bucket holds keys for a specific second
+- Sweeper clears expired buckets in batches
+
+### 3. **Thread-Safety (ConcurrentDeduplicator)**
+- Uses `ConcurrentHashMap` for the cache
+- Uses `ConcurrentHashMap.newKeySet()` for buckets
+- Relies on `ConcurrentHashMap.compute()` for atomic check-and-update
+
+## Test Categories
+
+### Basic Functional Tests
+
+#### testSingleHit()
+```java
+assertTrue(deduplicator.isFirstSeen("k1"));
+```
+**Purpose**: Verify first occurrence returns true.
+
+#### testSameKeyWithinTheTTLTime()
+```java
+assertTrue(testDedup.isFirstSeen("k1"));
+clock.setInstant(Instant.ofEpochSecond(1010L));
+assertFalse(testDedup.isFirstSeen("k1"));
+```
+**Purpose**: Verify duplicate within TTL returns false.
+
+#### testKeyExpiresAfter60Seconds()
+```java
+clock.setInstant(startTime.plusSeconds(60));
+assertFalse(dedup.isFirstSeen("k1"));
+clock.setInstant(startTime.plusSeconds(61));
+assertTrue(dedup.isFirstSeen("k1"));
+```
+**Purpose**: Verify exact TTL boundary (60 seconds).
+
+### Sweeper Tests
+
+#### testSweeperRemovesKeys()
+```java
+clock.setInstant(Instant.ofEpochSecond(1070L));
+dedup.sweeper();
+assertTrue(dedup.isFirstSeen("k1"));
+```
+**Purpose**: Verify sweeper removes expired keys from cache.
+
+#### testSweeperCleansUpExpiredBuckets()
+```java
+clock.setInstant(Instant.ofEpochSecond(200L));
+dedup.sweeper();
+assertTrue(dedup.isFirstSeen("k1"));
+```
+**Purpose**: Verify sweeper cleans up multiple expired buckets.
+
+### Concurrent Tests (ConcurrentDeduplicator)
+
+#### testConcurrentIsFirstSeenSameKey()
+```java
+int threadCount = 10;
+// 10 threads all call isFirstSeen("k1")
+assertEquals(1, firstSeenCount.get());
+```
+**Purpose**: Verify only one thread sees a key as first-seen concurrently.
+
+**What it tests**:
+- Atomic check-and-update via `ConcurrentHashMap.compute()`
+- No race conditions in duplicate detection
+
+#### testConcurrentIsFirstSeenDifferentKeys()
+```java
+int threadCount = 100;
+// Each thread calls isFirstSeen on unique key
+assertEquals(threadCount, firstSeenKeys.size());
+```
+**Purpose**: Verify concurrent unique key handling.
+
+#### testConcurrentCorrectnessWithOverlappingKeys()
+```java
+int threadCount = 50;
+int keyCount = 100;
+// Each thread processes all keys
+for (int i = 0; i < keyCount; i++) {
+    assertEquals(1, trueCountPerKey.get(key).get());
+}
+```
+**Purpose**: Verify no lost updates under high concurrency.
+
+#### testNoExceptionsUnderHighLoad()
+```java
+int threadCount = 50;
+int operationsPerThread = 1000;
+// Stress test with 50,000 operations
+assertEquals(0, errors.get());
+```
+**Purpose**: Verify stability under heavy load.
+
+## Key Thread-Safety Mechanisms
+
+### ConcurrentHashMap.compute()
+```java
+cache.compute(key, (k, existingTimestamp) -> {
+    if (existingTimestamp == null || isExpired(existingTimestamp)) {
+        return currentSecond;
+    }
+    return existingTimestamp;
+});
+```
+- Atomic check-and-update
+- No explicit locks needed
+- Handles concurrent modifications gracefully
+
+### Volatile lastSweptSecond
+```java
+private volatile long lastSweptSecond;
+```
+- Ensures visibility across threads
+- Sweeper must be single-threaded by design
+
+## Running the Tests
+
+```bash
+mvn test -Dtest=DeduplicatorTest
+mvn test -Dtest=ConcurrentDeduplicatorTest
+```
+
+---
+
+# LRU Cache Test Cases
+
+## Overview
+
+The `LRU` (single-threaded) and `ConcurrentLRU` (thread-safe) implement Least Recently Used cache with O(1) get/put using HashMap and doubly linked list. Tests verify eviction, access order, and thread-safety.
+
+## Implementation Key Concepts
+
+### 1. **Doubly Linked List**
+- Sentinel head/tail nodes eliminate null checks
+- Most recently used at head, least recently used at tail
+- O(1) move-to-head operation
+
+### 2. **HashMap + Linked List**
+- HashMap for O(1) key lookup
+- Linked list for O(1) eviction
+- Combined: O(1) get and put
+
+### 3. **Thread-Safety (ConcurrentLRU)**
+- Uses `ReentrantLock` to guard all operations
+- Even `get` operations require locking (modifies list order)
+- Single lock for simplicity
+
+## Test Categories
+
+### Basic Functional Tests
+
+#### testBasicGetPut()
+```java
+lru.put(1, 10);
+lru.put(2, 20);
+assertEquals(10, lru.get(1));
+assertEquals(-1, lru.get(3));
+```
+**Purpose**: Verify basic get/put operations.
+
+#### testEviction()
+```java
+lru.put(1, 10);
+lru.put(2, 20);
+lru.put(3, 30); // Evicts key 1
+assertEquals(-1, lru.get(1));
+```
+**Purpose**: Verify LRU eviction when capacity exceeded.
+
+#### testUpdateExisting()
+```java
+lru.put(1, 10);
+lru.put(1, 100); // Update moves to head
+lru.put(3, 30);  // Evicts key 2
+assertEquals(-1, lru.get(2));
+```
+**Purpose**: Verify update moves key to head (most recent).
+
+#### testAccessOrder()
+```java
+lru.get(1); // Access key 1, move to head
+lru.put(4, 40); // Evicts key 2
+assertEquals(-1, lru.get(2));
+```
+**Purpose**: Verify get() updates access order.
+
+### Edge Cases
+
+#### testCapacityOne()
+```java
+LRU lru = new LRU(1);
+lru.put(1, 10);
+lru.put(2, 20); // Evicts key 1
+assertEquals(-1, lru.get(1));
+```
+**Purpose**: Test smallest possible capacity.
+
+#### testInvalidCapacity()
+```java
+assertThrows(IllegalArgumentException.class, () -> new LRU(0));
+```
+**Purpose**: Verify capacity validation.
+
+#### testClear()
+```java
+lru.clear();
+assertEquals(0, lru.size());
+assertEquals(-1, lru.get(1));
+```
+**Purpose**: Verify clear operation.
+
+## Running the Tests
+
+```bash
+mvn test -Dtest=LRUTest
+mvn test -Dtest=ConcurrentLRUTest
+```
+
+---
+
+# Max Stack Test Cases
+
+## Overview
+
+Three implementations of max stack:
+- **TwoStackMaxStack**: Two-stack technique, O(1) push/pop/peek/getMax, no popMax
+- **PopMaxStack**: Linked list + TreeMap, O(log n) popMax
+- **ConcurrentMaxStack**: Thread-safe variant of PopMaxStack
+
+## Implementation Key Concepts
+
+### TwoStackMaxStack
+- Main stack for all values
+- Max stack tracks running maximum
+- Duplicate maxima pushed again for correct pop behavior
+
+### PopMaxStack
+- Doubly linked list for stack order
+- TreeMap of deques for max tracking
+- Node handles enable O(1) removal from middle
+
+## Test Categories
+
+### TwoStackMaxStack Tests
+
+#### testGetMaxMultipleElements()
+```java
+stack.push(5);
+stack.push(10);
+stack.push(3);
+assertEquals(10, stack.getMax());
+```
+**Purpose**: Verify max tracking.
+
+#### testPopUpdatesMax()
+```java
+stack.pop(); // Remove 3
+assertEquals(10, stack.getMax());
+stack.pop(); // Remove 10 (the max)
+assertEquals(5, stack.getMax());
+```
+**Purpose**: Verify max updates correctly on pop.
+
+#### testDuplicateValues()
+```java
+stack.push(10);
+stack.push(10);
+stack.pop(); // Remove one 10
+assertEquals(10, stack.getMax());
+```
+**Purpose**: Verify duplicate handling (>= comparison).
+
+### PopMaxStack Tests
+
+#### testPopMaxBasic()
+```java
+stack.push(5);
+stack.push(10);
+stack.push(3);
+assertEquals(10, stack.popMax());
+assertEquals(3, stack.top());
+```
+**Purpose**: Verify popMax removes max from middle.
+
+#### testPopMaxMiddleElement()
+```java
+stack.push(5);
+stack.push(10);
+stack.push(3);
+stack.push(7);
+assertEquals(10, stack.popMax());
+assertEquals(7, stack.top());
+```
+**Purpose**: Verify popMax from middle of stack.
+
+#### testAlternatingPopAndPopMax()
+```java
+stack.pop();
+stack.popMax();
+stack.pop();
+assertEquals(3, stack.top());
+```
+**Purpose**: Verify mixed pop/popMax operations.
+
+## Running the Tests
+
+```bash
+mvn test -Dtest=TwoStackMaxStackTest
+mvn test -Dtest=PopMaxStackTest
+mvn test -Dtest=ConcurrentMaxStackTest
+```
+
+---
+
+# Top K Frequent Elements Test Cases
+
+## Overview
+
+The `TopKFrequentElements` class provides two algorithms for finding top K frequent elements:
+- **Bucket Sort**: O(n) time, O(n) space
+- **Min-Heap**: O(n log k) time, O(k) space
+
+## Implementation Key Concepts
+
+### Bucket Sort Approach
+- Count frequencies using HashMap
+- Create array of lists indexed by frequency
+- Iterate from highest frequency to collect K elements
+
+### Min-Heap Approach
+- Count frequencies using HashMap
+- Use min-heap of size K to track top K
+- Keep smallest at top for easy eviction
+
+## Test Categories
+
+### Basic Functional Tests
+
+#### testSingleHit()
+```java
+int[] result = topKFrequentElements.topKFrequentUsingHeap(new int[]{1,1,1,2,2,3}, 2);
+assertArrayEquals(new int[]{1, 2}, result);
+```
+**Purpose**: Verify basic top K selection.
+
+#### testKEqualsOne()
+```java
+int[] result = topKFrequentElements.topKFrequentUsingHeap(new int[]{1,2,3,3,3,4,4}, 1);
+assertArrayEquals(new int[]{3}, result);
+```
+**Purpose**: Verify K=1 case (most frequent only).
+
+#### testMultipleElementsWithDifferentFrequencies()
+```java
+int[] result = topKFrequentElements.topKFrequentUsingHeap(new int[]{4,4,4,4,3,3,3,2,2,1}, 3);
+assertArrayEquals(new int[]{2,3,4}, result);
+```
+**Purpose**: Verify correct frequency ordering.
+
+### Edge Cases
+
+#### testKGreaterThanUniqueElements()
+```java
+int K = 5;
+int[] result = topKFrequentElements.topKFrequentUsingHeap(new int[]{1,1,2}, K);
+assertEquals(K, result.length);
+```
+**Purpose**: Verify handling when K > unique elements.
+
+#### testAllElementsSameFrequency()
+```java
+int[] result = topKFrequentElements.topKFrequentUsingHeap(new int[]{1,2,3,4}, 2);
+assertEquals(K, result.length);
+```
+**Purpose**: Verify tie-breaking (any K elements).
+
+#### testLargeArray()
+```java
+int[] nums = new int[100];
+// Fill with different frequencies
+int[] result = topKFrequentElements.topKFrequentUsingHeap(nums, 2);
+assertArrayEquals(new int[]{1, 2}, result);
+```
+**Purpose**: Verify scalability.
+
+### Algorithm Comparison
+
+Both bucket sort and min-heap approaches are tested with identical test cases to verify:
+- Correctness of both algorithms
+- Consistent results
+- Edge case handling
+
+## Running the Tests
+
+```bash
+mvn test -Dtest=TopKFrequentElementsTest
+```
+
+---
+
+# Overall Test Summary
+
+This test suite provides comprehensive coverage for all data structures:
+
+| Data Structure | Test Count | Key Focus |
+|---------------|------------|-----------|
+| HitCounter | 14 | Basic operations, expiration |
+| ConcurrentHitCounter | 44 | Lock-free concurrency, CAS |
+| Deduplicator | 5 | TTL expiration, sweeper |
+| ConcurrentDeduplicator | 14 | Concurrent deduplication |
+| LRU | 9 | Eviction, access order |
+| TwoStackMaxStack | 18 | Two-stack max tracking |
+| PopMaxStack | 22 | popMax operation |
+| TopKFrequentElements | 20 | Bucket sort vs heap |
+
+**Total**: 146 tests across all implementations
+
+All tests use JUnit 5 and include both single-threaded and concurrent scenarios where applicable.

@@ -6,6 +6,37 @@ A collection of concurrent data structure implementations in Java, designed to e
 
 This project contains implementations of various data structures with both single-threaded and thread-safe variants, serving as a learning resource for understanding concurrent programming in Java.
 
+## Table of Contents
+
+- [Overview](#overview)
+- [Project Structure](#project-structure)
+- [Data Structures](#data-structures)
+  - [Deduplicator](#deduplicator)
+  - [Hit Counter](#hit-counter)
+  - [LRU Cache](#lru-cache)
+  - [Max Stack](#max-stack)
+  - [Top K Frequent Elements](#top-k-frequent-elements)
+  - [Rate Limiter](#rate-limiter)
+- [Building](#building)
+- [Running Tests](#running-tests)
+  - [Test Strategy](#test-strategy)
+- [Design Principles](#design-principles)
+- [Requirements](#requirements)
+- [License](#license)
+
+## Project Structure
+
+All sources live under `src/main/java/dev/aahmedlab`, grouped by package. Each package maps to a section in [Data Structures](#data-structures).
+
+| Package | Classes | Section |
+| --- | --- | --- |
+| [`dedup`](src/main/java/dev/aahmedlab/dedup) | [`Deduplicator`](src/main/java/dev/aahmedlab/dedup/Deduplicator.java), [`ConcurrentDeduplicator`](src/main/java/dev/aahmedlab/dedup/ConcurrentDeduplicator.java) | [Deduplicator](#deduplicator) |
+| [`hitcounter`](src/main/java/dev/aahmedlab/hitcounter) | [`HitCounter`](src/main/java/dev/aahmedlab/hitcounter/HitCounter.java), [`ConcurrentHitCounter`](src/main/java/dev/aahmedlab/hitcounter/ConcurrentHitCounter.java), [`Hit`](src/main/java/dev/aahmedlab/hitcounter/Hit.java) | [Hit Counter](#hit-counter) |
+| [`lru`](src/main/java/dev/aahmedlab/lru) | [`LRU`](src/main/java/dev/aahmedlab/lru/LRU.java), [`ConcurrentLRU`](src/main/java/dev/aahmedlab/lru/ConcurrentLRU.java), [`Node`](src/main/java/dev/aahmedlab/lru/Node.java) | [LRU Cache](#lru-cache) |
+| [`maxstack`](src/main/java/dev/aahmedlab/maxstack) | [`TwoStackMaxStack`](src/main/java/dev/aahmedlab/maxstack/TwoStackMaxStack.java), [`PopMaxStack`](src/main/java/dev/aahmedlab/maxstack/PopMaxStack.java), [`ConcurrentMaxStack`](src/main/java/dev/aahmedlab/maxstack/ConcurrentMaxStack.java), [`DoubleLinkedList`](src/main/java/dev/aahmedlab/maxstack/DoubleLinkedList.java), [`Node`](src/main/java/dev/aahmedlab/maxstack/Node.java) | [Max Stack](#max-stack) |
+| [`frequentelement`](src/main/java/dev/aahmedlab/frequentelement) | [`TopKFrequentElements`](src/main/java/dev/aahmedlab/frequentelement/TopKFrequentElements.java) | [Top K Frequent Elements](#top-k-frequent-elements) |
+| [`ratelimiter`](src/main/java/dev/aahmedlab/ratelimiter) | [`TokenBucket`](src/main/java/dev/aahmedlab/ratelimiter/TokenBucket.java), [`ConcurrentTokenBucket`](src/main/java/dev/aahmedlab/ratelimiter/ConcurrentTokenBucket.java), [`LockFreeTokenBucket`](src/main/java/dev/aahmedlab/ratelimiter/LockFreeTokenBucket.java), [`FixedWindow`](src/main/java/dev/aahmedlab/ratelimiter/FixedWindow.java), [`ConcurrentFixedWindow`](src/main/java/dev/aahmedlab/ratelimiter/ConcurrentFixedWindow.java), [`SlidingWindowLog`](src/main/java/dev/aahmedlab/ratelimiter/SlidingWindowLog.java), [`SlidingWindowCounter`](src/main/java/dev/aahmedlab/ratelimiter/SlidingWindowCounter.java) | [Rate Limiter](#rate-limiter) |
+
 ## Data Structures
 
 ### Deduplicator
@@ -30,6 +61,15 @@ This project contains implementations of various data structures with both singl
   - Bucket sort: O(n) time complexity
   - Min-heap: O(n log k) time complexity
 
+### Rate Limiter
+- **TokenBucket**: Single-threaded token bucket with time-based refill
+- **ConcurrentTokenBucket**: Thread-safe token bucket using a single intrinsic lock
+- **LockFreeTokenBucket**: Thread-safe token bucket using AtomicReference with lock-free CAS
+- **FixedWindow**: Single-threaded fixed-window limiter (not thread-safe)
+- **ConcurrentFixedWindow**: Thread-safe fixed-window limiter using a single intrinsic lock
+- **SlidingWindowLog**: Thread-safe sliding-window-log limiter; exact accounting via a timestamp deque
+- **SlidingWindowCounter**: Thread-safe sliding-window-counter limiter; approximate, O(1) memory using weighted previous/current window counts
+
 ## Building
 
 ```bash
@@ -43,6 +83,19 @@ mvn test
 ```
 
 All tests use JUnit 5 and include both single-threaded and concurrent test scenarios.
+
+### Test Strategy
+
+Each implementation is verified with a layered set of scenarios:
+
+- **Input validation**: Constructors reject non-positive capacity or window/refill values (`IllegalArgumentException`).
+- **Functional correctness**: Initial state, exhausting capacity, the boundary case of capacity one, and time-based behavior (window reset/slide or token refill via short `Thread.sleep` pauses).
+- **Concurrency safety** (thread-safe variants only):
+  - *Capacity is never exceeded*: many threads hammer a shared limiter; the total allowed equals the configured capacity.
+  - *Same-time bursts*: a `CountDownLatch` releases all threads simultaneously, repeated via `@RepeatedTest` to surface race conditions.
+  - *No lost updates*: every request is accounted for as either allowed or denied (allowed + denied == total requests).
+  - *Parameterized sweeps*: `@ParameterizedTest` runs the same concurrent checks across a range of capacities.
+- **Single-threaded variants** (e.g. `FixedWindow`) are intentionally tested without concurrency assertions, since they make no thread-safety guarantees.
 
 ## Design Principles
 

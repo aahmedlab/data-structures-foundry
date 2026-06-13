@@ -1,4 +1,3 @@
 package dev.aahmedlab.lru;
 
-class ConcurrentLRUTest {
-}
+class ConcurrentLRUTest {}

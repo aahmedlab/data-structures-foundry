@@ -109,6 +109,7 @@ Each implementation is verified with a layered set of scenarios:
 - Java 17+
 - Maven 3.x
 - Lombok (for boilerplate reduction)
+- Spotless (for code formatting with google-java-format)
 
 ## License
 

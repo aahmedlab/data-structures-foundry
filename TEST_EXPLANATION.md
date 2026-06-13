@@ -1020,6 +1020,357 @@ mvn test -Dtest=TopKFrequentElementsTest
 
 ---
 
+# Rate Limiter Test Cases
+
+## Overview
+
+The rate limiter package includes seven implementations:
+- **TokenBucket**: Single-threaded token bucket with time-based refill
+- **ConcurrentTokenBucket**: Thread-safe token bucket using intrinsic lock
+- **LockFreeTokenBucket**: Thread-safe token bucket using lock-free CAS
+- **FixedWindow**: Single-threaded fixed-window limiter
+- **ConcurrentFixedWindow**: Thread-safe fixed-window limiter using intrinsic lock
+- **SlidingWindowLog**: Thread-safe sliding-window-log limiter with exact accounting
+- **SlidingWindowCounter**: Thread-safe sliding-window-counter limiter with approximate counting
+
+## Implementation Key Concepts
+
+### Token Bucket
+- **Refill mechanism**: Tokens are added based on elapsed time and refill rate
+- **Capacity**: Maximum tokens that can be stored
+- **Fractional token accumulation**: Uses `millisPerToken` to avoid truncation errors
+- **Zero refill rate**: Allowed (no refill, fixed capacity)
+
+### Fixed Window
+- **Window reset**: Counter resets at fixed intervals
+- **Simple**: O(1) time and space
+- **Burst tolerance**: Allows full capacity at window boundaries
+
+### Sliding Window Log
+- **Exact accounting**: Stores timestamp of each request
+- **Deque-based**: Removes expired timestamps efficiently
+- **Memory**: O(request count within window)
+
+### Sliding Window Counter
+- **Approximate**: Weighted average of previous and current window
+- **O(1) memory**: Only stores two counters
+- **Formula**: `count = prevCount * (1 - windowProgress) + currCount`
+
+## Test Categories
+
+### Input Validation Tests
+
+#### testInvalidCapacity()
+```java
+assertThrows(IllegalArgumentException.class, () -> new TokenBucket(0, 10));
+assertThrows(IllegalArgumentException.class, () -> new TokenBucket(-1, 10));
+```
+**Purpose**: Verify constructors reject non-positive capacity.
+
+#### testInvalidRefillRate()
+```java
+assertThrows(IllegalArgumentException.class, () -> new TokenBucket(10, -1));
+```
+**Purpose**: Verify constructors reject negative refill rates.
+
+### Functional Correctness Tests
+
+#### testInitialState()
+```java
+TokenBucket bucket = new TokenBucket(10, 5);
+assertTrue(bucket.allowRequest());
+```
+**Purpose**: Verify bucket starts at full capacity.
+
+#### testExhaustCapacity()
+```java
+for (int i = 0; i < capacity; i++) {
+    assertTrue(bucket.allowRequest());
+}
+assertFalse(bucket.allowRequest());
+```
+**Purpose**: Verify capacity enforcement.
+
+#### testCapacityOne()
+```java
+TokenBucket bucket = new TokenBucket(1, 5);
+assertTrue(bucket.allowRequest());
+assertFalse(bucket.allowRequest());
+```
+**Purpose**: Test smallest possible capacity.
+
+#### testZeroRefillRate()
+```java
+TokenBucket bucket = new TokenBucket(10, 0);
+// Exhaust capacity
+for (int i = 0; i < 10; i++) {
+    assertTrue(bucket.allowRequest());
+}
+// No refill should occur
+Thread.sleep(100);
+assertFalse(bucket.allowRequest());
+```
+**Purpose**: Verify zero refill rate means no refill (fixed capacity).
+
+### Time-Based Refill Tests
+
+#### testPartialRefill()
+```java
+TokenBucket bucket = new TokenBucket(10, 10); // 10 tokens/sec
+bucket.allowRequest(); // 9 tokens left
+Thread.sleep(100); // Should refill 1 token
+assertTrue(bucket.allowRequest());
+```
+**Purpose**: Verify fractional time refill (100ms = 1 token at 10/sec).
+
+#### testHighRefillRate()
+```java
+TokenBucket bucket = new TokenBucket(100, 1000); // 1000 tokens/sec
+// Exhaust
+for (int i = 0; i < 100; i++) {
+    bucket.allowRequest();
+}
+Thread.sleep(50); // Should refill 50 tokens
+for (int i = 0; i < 50; i++) {
+    assertTrue(bucket.allowRequest());
+}
+```
+**Purpose**: Verify high refill rates work correctly.
+
+#### testFractionalTokenAccumulation()
+```java
+TokenBucket bucket = new TokenBucket(10, 10); // 1 token per 100ms
+bucket.allowRequest(); // 9 left
+Thread.sleep(250); // Should refill 2.5 → 2 tokens
+assertTrue(bucket.allowRequest()); // 10 tokens
+assertTrue(bucket.allowRequest()); // 9 tokens
+assertFalse(bucket.allowRequest()); // Still 9, not 10
+```
+**Purpose**: Verify fractional tokens accumulate correctly without truncation.
+
+#### testMultipleRefillCycles()
+```java
+TokenBucket bucket = new TokenBucket(10, 5); // 5 tokens/sec
+// Exhaust
+for (int i = 0; i < 10; i++) {
+    bucket.allowRequest();
+}
+// Wait for 3 refill cycles
+Thread.sleep(3000); // Should refill 15 tokens, capped at 10
+for (int i = 0; i < 10; i++) {
+    assertTrue(bucket.allowRequest());
+}
+```
+**Purpose**: Verify multiple refill cycles cap at capacity.
+
+### Concurrency Tests (Thread-Safe Variants)
+
+#### testConcurrentCapacityNeverExceeded()
+```java
+int capacity = 100;
+int threadCount = 50;
+int requestsPerThread = 10;
+ConcurrentTokenBucket bucket = new ConcurrentTokenBucket(capacity, 0);
+
+// 50 threads, each trying 10 requests
+AtomicInteger allowed = new AtomicInteger(0);
+for (int i = 0; i < threadCount; i++) {
+    executor.submit(() -> {
+        for (int j = 0; j < requestsPerThread; j++) {
+            if (bucket.allowRequest()) {
+                allowed.incrementAndGet();
+            }
+        }
+    });
+}
+
+// Total allowed should equal capacity
+assertEquals(capacity, allowed.get());
+```
+**Purpose**: Verify capacity is never exceeded under concurrent access.
+
+#### testConcurrentBurstWithCountDownLatch()
+```java
+CountDownLatch latch = new CountDownLatch(threadCount);
+CountDownLatch startLatch = new CountDownLatch(1);
+
+for (int i = 0; i < threadCount; i++) {
+    executor.submit(() -> {
+        startLatch.await(); // All threads wait here
+        if (bucket.allowRequest()) {
+            allowed.incrementAndGet();
+        }
+        latch.countDown();
+    });
+}
+
+startLatch.countDown(); // Release all threads simultaneously
+latch.await();
+assertEquals(capacity, allowed.get());
+```
+**Purpose**: Verify thread-safety when all threads burst simultaneously.
+
+**What it tests**:
+- Race conditions at exact same time
+- Atomic operations under high contention
+- Repeated via `@RepeatedTest(10)` to catch flaky bugs
+
+#### testNoLostUpdates()
+```java
+int totalRequests = threadCount * requestsPerThread;
+int allowed = allowedCount.get();
+int denied = totalRequests - allowed;
+
+assertEquals(totalRequests, allowed + denied);
+assertEquals(capacity, allowed);
+```
+**Purpose**: Verify every request is accounted for (no lost updates).
+
+#### testConcurrentMultipleRefillCycles()
+```java
+ConcurrentTokenBucket bucket = new ConcurrentTokenBucket(10, 5);
+// Exhaust
+for (int i = 0; i < 10; i++) {
+    bucket.allowRequest();
+}
+
+// 3 cycles with concurrent access
+for (int cycle = 0; cycle < 3; cycle++) {
+    Thread.sleep(2000); // Wait for refill
+    AtomicInteger allowed = new AtomicInteger(0);
+    // 20 threads compete for refilled tokens
+    for (int i = 0; i < 20; i++) {
+        executor.submit(() -> {
+            if (bucket.allowRequest()) {
+                allowed.incrementAndGet();
+            }
+        });
+    }
+    executor.awaitTermination(1, TimeUnit.SECONDS);
+    assertTrue(allowed.get() <= 10); // Never exceed capacity
+}
+```
+**Purpose**: Verify refill correctness under concurrent access over multiple cycles.
+
+### Parameterized Tests
+
+#### testDifferentCapacities()
+```java
+@ParameterizedTest
+@ValueSource(ints = {1, 5, 10, 50, 100})
+void testDifferentCapacities(int capacity)
+```
+**Purpose**: Verify algorithm scales with different capacities.
+
+#### testDifferentRefillRates()
+```java
+@ParameterizedTest
+@ValueSource(ints = {1, 5, 10, 100, 1000})
+void testDifferentRefillRates(int refillRate)
+```
+**Purpose**: Verify refill mechanism works across different rates.
+
+## Key Thread-Safety Mechanisms
+
+### ConcurrentTokenBucket (Intrinsic Lock)
+```java
+public synchronized boolean allowRequest() {
+    refill();
+    if (bucket < 1) return false;
+    bucket--;
+    return true;
+}
+```
+- Simple synchronized methods
+- Single lock for all operations
+- Easy to reason about, but lower concurrency
+
+### LockFreeTokenBucket (CAS)
+```java
+while (true) {
+    BucketState current = state.get();
+    // Calculate new state
+    BucketState nextState = new BucketState(newTokens - 1, lastRefillTime);
+    if (state.compareAndSet(current, nextState)) {
+        return true;
+    }
+    // Retry if CAS failed
+}
+```
+- Lock-free using `AtomicReference<BucketState>`
+- Higher concurrency, more complex
+- Immutable `BucketState` record
+
+### Fixed Window (Intrinsic Lock)
+```java
+public synchronized boolean allowRequest(long timestamp) {
+    long currentWindow = timestamp / windowSizeMillis;
+    if (currentWindow != window) {
+        window = currentWindow;
+        count = 0;
+    }
+    if (count >= capacity) return false;
+    count++;
+    return true;
+}
+```
+- Window reset logic protected by lock
+- Simple and efficient
+
+### Sliding Window Log (ConcurrentLinkedDeque)
+```java
+private final Deque<Long> timestamps = new ConcurrentLinkedDeque<>();
+
+public synchronized boolean allowRequest(long timestamp) {
+    removeExpiredTimestamps(timestamp);
+    if (timestamps.size() >= capacity) return false;
+    timestamps.addLast(timestamp);
+    return true;
+}
+```
+- Thread-safe deque for timestamp storage
+- Synchronized methods for atomic check-and-add
+- Exact accounting, higher memory usage
+
+### Sliding Window Counter (Intrinsic Lock)
+```java
+public synchronized boolean allowRequest(long timestamp) {
+    long currentWindow = timestamp / windowSizeMillis;
+    if (currentWindow != window) {
+        prevCount = (currentWindow == window + 1) ? count : 0;
+        window = currentWindow;
+        count = 0;
+    }
+    double windowProgress = (timestamp % windowSizeMillis) / (double) windowSizeMillis;
+    double estimatedCount = prevCount * (1 - windowProgress) + count;
+    if (estimatedCount >= capacity) return false;
+    count++;
+    return true;
+}
+```
+- Weighted average for smoothing
+- O(1) memory
+- Approximate but efficient
+
+## Running the Tests
+
+```bash
+mvn test -Dtest=TokenBucketTest
+mvn test -Dtest=ConcurrentTokenBucketTest
+mvn test -Dtest=FixedWindowTest
+mvn test -Dtest=ConcurrentFixedWindowTest
+mvn test -Dtest=SlidingWindowLogTest
+mvn test -Dtest=SlidingWindowCounterTest
+```
+
+### Expected Behavior
+- All tests should pass ✅
+- No race conditions or deadlocks
+- Deterministic results (even in concurrent tests)
+- Capacity never exceeded under any concurrency level
+
+---
+
 # Overall Test Summary
 
 This test suite provides comprehensive coverage for all data structures:
@@ -1027,14 +1378,22 @@ This test suite provides comprehensive coverage for all data structures:
 | Data Structure | Test Count | Key Focus |
 |---------------|------------|-----------|
 | HitCounter | 14 | Basic operations, expiration |
-| ConcurrentHitCounter | 44 | Lock-free concurrency, CAS |
+| ConcurrentHitCounter | 58 | Lock-free concurrency, CAS |
 | Deduplicator | 5 | TTL expiration, sweeper |
-| ConcurrentDeduplicator | 14 | Concurrent deduplication |
+| ConcurrentDeduplicator | 15 | Concurrent deduplication |
 | LRU | 9 | Eviction, access order |
-| TwoStackMaxStack | 18 | Two-stack max tracking |
-| PopMaxStack | 22 | popMax operation |
-| TopKFrequentElements | 20 | Bucket sort vs heap |
+| ConcurrentLRU | 9 | Thread-safe LRU |
+| TwoStackMaxStack | 16 | Two-stack max tracking |
+| PopMaxStack | 25 | popMax operation |
+| ConcurrentMaxStack | 25 | Thread-safe max stack |
+| TopKFrequentElements | 22 | Bucket sort vs heap |
+| TokenBucket | 25 | Time-based refill, fractional tokens |
+| ConcurrentTokenBucket | 37 | Thread-safe token bucket |
+| FixedWindow | 12 | Window reset, bursts |
+| ConcurrentFixedWindow | 23 | Thread-safe fixed window |
+| SlidingWindowLog | 24 | Exact accounting, deque-based |
+| SlidingWindowCounter | 24 | Approximate, weighted average |
 
-**Total**: 146 tests across all implementations
+**Total**: 332 tests across all implementations
 
 All tests use JUnit 5 and include both single-threaded and concurrent scenarios where applicable.

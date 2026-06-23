@@ -10,18 +10,18 @@ import java.util.*;
  * select the top {@code k}:
  *
  * <ul>
- *   <li>{@link #topKFrequentUsingBucket(int[], int)} — bucket sort by frequency, O(n)
+ *   <li>{@link #topKFrequentUsingBucket(int[], int)} — bucket sort by freq, O(n)
  *   <li>{@link #topKFrequentUsingHeap(int[], int)} — bounded min-heap, O(n log k)
  * </ul>
  *
  * <p><b>Design Decisions:</b>
  *
  * <ul>
- *   <li><b>Bucket sort:</b> A frequency can never exceed {@code nums.length}, so an array of {@code
- *       nums.length + 1} buckets indexed by frequency yields linear-time selection by scanning from
+ *   <li><b>Bucket sort:</b> A freq can never exceed {@code nums.length}, so an array of {@code
+ *       nums.length + 1} buckets indexed by freq yields linear-time selection by scanning from
  *       the highest bucket down.
  *   <li><b>Min-heap of size {@code k}:</b> Keeping only the {@code k} largest entries (evicting the
- *       smallest on overflow) bounds memory to O(k) beyond the frequency map, which is preferable
+ *       smallest on overflow) bounds memory to O(k) beyond the freq map, which is preferable
  *       when {@code k} is much smaller than the number of distinct elements.
  * </ul>
  *

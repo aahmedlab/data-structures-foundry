@@ -1,10 +1,10 @@
-# Concurrency Kata
+# Data Structures Foundry
 
-A collection of concurrent data structure implementations in Java, designed to explore concurrency patterns, thread safety, and performance trade-offs.
+A from-scratch collection of data structures, algorithms, and concurrency primitives in Java — built to explore internals, thread safety, and performance trade-offs.
 
 ## Overview
 
-This project contains implementations of various data structures with both single-threaded and thread-safe variants, serving as a learning resource for understanding concurrent programming in Java.
+This project contains hand-built implementations spanning core data structures, probabilistic structures, and system-design building blocks, many with both single-threaded and thread-safe variants. It serves as a learning resource and portfolio for understanding how these structures work under the hood.
 
 ## Table of Contents
 

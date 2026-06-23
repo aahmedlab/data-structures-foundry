@@ -1,5 +1,6 @@
 # Data Structures Foundry
 
+[![CI](https://github.com/aahmedlab/data-structures-foundry/actions/workflows/ci.yml/badge.svg)](https://github.com/aahmedlab/data-structures-foundry/actions/workflows/ci.yml)
 [![License: MIT](https://img.shields.io/badge/License-MIT-yellow.svg)](LICENSE)
 [![Java](https://img.shields.io/badge/Java-25-007396?logo=openjdk&logoColor=white)](https://openjdk.org/)
 [![Build](https://img.shields.io/badge/Build-Maven-C71A36?logo=apachemaven&logoColor=white)](https://maven.apache.org/)

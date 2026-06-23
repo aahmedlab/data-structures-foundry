@@ -1,6 +1,7 @@
 # Data Structures Foundry
 
 [![CI](https://github.com/aahmedlab/data-structures-foundry/actions/workflows/ci.yml/badge.svg)](https://github.com/aahmedlab/data-structures-foundry/actions/workflows/ci.yml)
+[![Coverage](.github/badges/jacoco.svg)](https://github.com/aahmedlab/data-structures-foundry/actions/workflows/ci.yml)
 [![License: MIT](https://img.shields.io/badge/License-MIT-yellow.svg)](LICENSE)
 [![Java](https://img.shields.io/badge/Java-25-007396?logo=openjdk&logoColor=white)](https://openjdk.org/)
 [![Build](https://img.shields.io/badge/Build-Maven-C71A36?logo=apachemaven&logoColor=white)](https://maven.apache.org/)
@@ -90,6 +91,8 @@ mvn test
 ```
 
 All tests use JUnit 5 and include both single-threaded and concurrent test scenarios.
+
+Code coverage is measured by [JaCoCo](https://www.jacoco.org/jacoco/) during `mvn verify`. After a build, the HTML report is available at `target/site/jacoco/index.html`, and the coverage badge above is refreshed on every CI run.
 
 ### Test Strategy
 

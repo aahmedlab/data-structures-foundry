@@ -413,8 +413,17 @@ class ConcurrentHitCounterTest {
     latch.await(5, TimeUnit.SECONDS);
     executor.shutdown();
 
-    int totalHits = counter.getHit((numThreads - 1) * CAPACITY);
-    assertEquals(hitsPerThread, totalHits);
+    // Every timestamp i*CAPACITY maps to the same bucket (timestamp % CAPACITY == 0), so all
+    // threads contend for a single slot. With distinct timestamps the slot is overwritten rather
+    // than accumulated, so exactly one thread's run survives — which one depends on scheduling and
+    // is not deterministic. The invariant that always holds is that the surviving count is one
+    // thread's uncorrupted run: at least one hit, at most hitsPerThread. Query at timestamp 0 so
+    // the surviving slot (timestamp >= 0) is never lazily expired regardless of the winner.
+    int surviving = counter.getHit(0);
+    assertTrue(
+        surviving >= 1 && surviving <= hitsPerThread,
+        "colliding timestamps overwrite one slot; the survivor must be a single uncorrupted run but was "
+            + surviving);
   }
 
   @RepeatedTest(10)

@@ -472,7 +472,10 @@ class ConcurrentTokenBucketTest {
   @ParameterizedTest
   @ValueSource(ints = {1, 5, 10, 50, 100})
   void testConcurrentVariousCapacities(int capacity) throws InterruptedException {
-    ConcurrentTokenBucket bucket = new ConcurrentTokenBucket(capacity, capacity);
+    // refillRate 0 disables time-based refill, so "exactly capacity granted" is deterministic.
+    // With a non-zero rate the bucket may legitimately refill a token mid-run on a slow runner,
+    // granting capacity + 1 and making the assertion flaky.
+    ConcurrentTokenBucket bucket = new ConcurrentTokenBucket(capacity, 0);
     int numThreads = 10;
     int requestsPerThread = capacity / 2 + 5;
 
@@ -500,7 +503,9 @@ class ConcurrentTokenBucketTest {
 
   @Test
   void testConcurrentLargeCapacity() throws InterruptedException {
-    ConcurrentTokenBucket bucket = new ConcurrentTokenBucket(1000, 100);
+    // refillRate 0 disables refill so the run cannot grant more than the initial 1000 tokens
+    // (a non-zero rate refills ~1 token per 10 ms, over-granting on a slow runner).
+    ConcurrentTokenBucket bucket = new ConcurrentTokenBucket(1000, 0);
     int numThreads = 20;
     int requestsPerThread = 100;
 

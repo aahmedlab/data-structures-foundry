@@ -25,6 +25,8 @@ This project contains hand-built implementations spanning core data structures, 
   - [Max Stack](#max-stack)
   - [Top K Frequent Elements](#top-k-frequent-elements)
   - [Rate Limiter](#rate-limiter)
+  - [Hash Map](#hash-map)
+  - [Autocomplete](#autocomplete)
 - [Building](#building)
 - [Running Tests](#running-tests)
   - [Test Strategy](#test-strategy)
@@ -44,6 +46,8 @@ All sources live under `src/main/java/dev/aahmedlab`, grouped by package. Each p
 | [`maxstack`](src/main/java/dev/aahmedlab/maxstack) | [`TwoStackMaxStack`](src/main/java/dev/aahmedlab/maxstack/TwoStackMaxStack.java), [`PopMaxStack`](src/main/java/dev/aahmedlab/maxstack/PopMaxStack.java), [`ConcurrentMaxStack`](src/main/java/dev/aahmedlab/maxstack/ConcurrentMaxStack.java), [`DoubleLinkedList`](src/main/java/dev/aahmedlab/maxstack/DoubleLinkedList.java), [`Node`](src/main/java/dev/aahmedlab/maxstack/Node.java) | [Max Stack](#max-stack) |
 | [`frequentelement`](src/main/java/dev/aahmedlab/frequentelement) | [`TopKFrequentElements`](src/main/java/dev/aahmedlab/frequentelement/TopKFrequentElements.java) | [Top K Frequent Elements](#top-k-frequent-elements) |
 | [`ratelimiter`](src/main/java/dev/aahmedlab/ratelimiter) | [`TokenBucket`](src/main/java/dev/aahmedlab/ratelimiter/TokenBucket.java), [`ConcurrentTokenBucket`](src/main/java/dev/aahmedlab/ratelimiter/ConcurrentTokenBucket.java), [`LockFreeTokenBucket`](src/main/java/dev/aahmedlab/ratelimiter/LockFreeTokenBucket.java), [`FixedWindow`](src/main/java/dev/aahmedlab/ratelimiter/FixedWindow.java), [`ConcurrentFixedWindow`](src/main/java/dev/aahmedlab/ratelimiter/ConcurrentFixedWindow.java), [`SlidingWindowLog`](src/main/java/dev/aahmedlab/ratelimiter/SlidingWindowLog.java), [`SlidingWindowCounter`](src/main/java/dev/aahmedlab/ratelimiter/SlidingWindowCounter.java) | [Rate Limiter](#rate-limiter) |
+| [`map`](src/main/java/dev/aahmedlab/map) | [`ChainingHashMap`](src/main/java/dev/aahmedlab/map/ChainingHashMap.java), [`Node`](src/main/java/dev/aahmedlab/map/Node.java) | [Hash Map](#hash-map) |
+| [`autocomplete`](src/main/java/dev/aahmedlab/autocomplete) | [`Autocomplete`](src/main/java/dev/aahmedlab/autocomplete/Autocomplete.java), [`TrieNode`](src/main/java/dev/aahmedlab/autocomplete/TrieNode.java), [`Entry`](src/main/java/dev/aahmedlab/autocomplete/Entry.java) | [Autocomplete](#autocomplete) |
 
 ## Data Structures
 
@@ -77,6 +81,15 @@ All sources live under `src/main/java/dev/aahmedlab`, grouped by package. Each p
 - **ConcurrentFixedWindow**: Thread-safe fixed-window limiter using a single intrinsic lock
 - **SlidingWindowLog**: Thread-safe sliding-window-log limiter; exact accounting via a timestamp deque
 - **SlidingWindowCounter**: Thread-safe sliding-window-counter limiter; approximate, O(1) memory using weighted previous/current window counts
+
+### Hash Map
+- **ChainingHashMap**: Single-threaded generic hash map using separate chaining (linked-list buckets) for collision resolution, with hash spreading and load-factor-based resizing (0.75). O(1) average get/put/remove
+- **Node**: Bucket node holding the key, value, cached hash, and a pointer to the next entry in its chain
+
+### Autocomplete
+- **Autocomplete**: Prefix-search coordinator over a character trie, parameterized by the number of suggestions `k` and backed by a per-word frequency map
+- **TrieNode**: 26-way trie node that maintains a bounded min-heap cache of the top-`k` highest-frequency words sharing its prefix
+- **Entry**: Immutable record pairing a word with its frequency
 
 ## Building
 

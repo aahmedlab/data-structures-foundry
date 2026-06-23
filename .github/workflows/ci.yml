@@ -15,10 +15,10 @@ jobs:
 
     steps:
       - name: Check out repository
-        uses: actions/checkout@v4
+        uses: actions/checkout@v7
 
       - name: Set up JDK 25
-        uses: actions/setup-java@v4
+        uses: actions/setup-java@v5
         with:
           java-version: '25'
           distribution: 'temurin'
@@ -27,17 +27,24 @@ jobs:
       - name: Build and test
         run: mvn -B clean verify
 
-      - name: Generate JaCoCo coverage badge
-        uses: cicirello/jacoco-badge-generator@v2
-        with:
-          jacoco-csv-file: target/site/jacoco/jacoco.csv
-          badges-directory: .github/badges
-          generate-coverage-badge: true
-          coverage-badge-filename: jacoco.svg
-
-      - name: Commit coverage badge
+      - name: Compute coverage badge data
         if: github.event_name == 'push'
-        uses: stefanzweifel/git-auto-commit-action@v5
+        run: |
+          pct=$(awk -F, 'NR>1 {m+=$4; c+=$5} END {printf "%.0f", (c/(m+c))*100}' target/site/jacoco/jacoco.csv)
+          if   [ "$pct" -ge 90 ]; then color=brightgreen
+          elif [ "$pct" -ge 80 ]; then color=green
+          elif [ "$pct" -ge 70 ]; then color=yellowgreen
+          elif [ "$pct" -ge 60 ]; then color=yellow
+          elif [ "$pct" -ge 50 ]; then color=orange
+          else color=red; fi
+          mkdir -p .github/badges
+          printf '{"schemaVersion":1,"label":"coverage","message":"%s%%","color":"%s"}\n' "$pct" "$color" \
+            > .github/badges/coverage.json
+          echo "Coverage: ${pct}% (${color})"
+
+      - name: Commit coverage badge data
+        if: github.event_name == 'push'
+        uses: stefanzweifel/git-auto-commit-action@v7
         with:
           commit_message: 'Update coverage badge [skip ci]'
-          file_pattern: '.github/badges/jacoco.svg'
+          file_pattern: '.github/badges/coverage.json'

@@ -1,7 +1,5 @@
 package dev.aahmedlab.map;
 
-import java.util.Arrays;
-
 @SuppressWarnings("unchecked")
 public class ChainingHashMap<K, V> {
   private Node<K, V>[] slots;
@@ -75,14 +73,17 @@ public class ChainingHashMap<K, V> {
   }
 
   private void resize(int newCapacity) {
-    Node<K, V>[] copiedSlots = Arrays.copyOf(slots, slots.length);
+    Node<K, V>[] oldSlots = slots;
     slots = new Node[newCapacity];
     N = newCapacity;
     threshold = (int) (N * loadFactor);
-    for (Node<K, V> node : copiedSlots) {
-      if (node != null) {
+    for (Node<K, V> node : oldSlots) {
+      while (node != null) {
+        Node<K, V> next = node.getNext();
         int index = indexFor(node.getHashKey());
+        node.setNext(slots[index]);
         slots[index] = node;
+        node = next;
       }
     }
   }

@@ -1,10 +1,12 @@
 package dev.aahmedlab.map;
 
+import lombok.Getter;
+
 @SuppressWarnings("unchecked")
 public class ChainingHashMap<K, V> {
   private Node<K, V>[] slots;
   private int N = 64;
-  private int size;
+  @Getter private int size;
   private int threshold;
   private final double loadFactor = 0.75;
 
@@ -74,7 +76,7 @@ public class ChainingHashMap<K, V> {
 
   private void resize(int newCapacity) {
     Node<K, V>[] oldSlots = slots;
-    slots = new Node[newCapacity];
+    slots = (Node<K, V>[]) new Node[newCapacity];
     N = newCapacity;
     threshold = (int) (N * loadFactor);
     for (Node<K, V> node : oldSlots) {
@@ -86,14 +88,6 @@ public class ChainingHashMap<K, V> {
         node = next;
       }
     }
-  }
-
-  private int getIndex(Node<K, V> node) {
-    return indexFor(node.getHashKey());
-  }
-
-  private int getIndex(K key) {
-    return indexFor(spread(key));
   }
 
   private int indexFor(int hash) {

@@ -35,44 +35,44 @@ import java.util.TreeMap;
  * @param <T> the type of elements in this stack, must be {@link Comparable}
  */
 class PopMaxStack<T extends Comparable<T>> {
-    private final DoubleLinkedList<T> stack = new DoubleLinkedList<>();
-    private final TreeMap<T, Deque<Node<T>>> maxStack = new TreeMap<>();
+  private final DoubleLinkedList<T> stack = new DoubleLinkedList<>();
+  private final TreeMap<T, Deque<Node<T>>> maxStack = new TreeMap<>();
 
-    public void push(T value) {
-        Node<T> node = stack.push(value);
-        maxStack.computeIfAbsent(value, _ -> new ArrayDeque<>()).push(node);
-    }
+  public void push(T value) {
+    Node<T> node = stack.push(value);
+    maxStack.computeIfAbsent(value, _ -> new ArrayDeque<>()).push(node);
+  }
 
-    public T pop() {
-        Node<T> node = stack.pop();
-        if (node == null) return null;
-        T value = node.getValue();
-        Deque<Node<T>> items = maxStack.get(value);
-        if (items != null) {
-            if (!items.isEmpty()) items.pop();
-            if (items.isEmpty()) maxStack.remove(value);
-        }
-        return value;
+  public T pop() {
+    Node<T> node = stack.pop();
+    if (node == null) return null;
+    T value = node.getValue();
+    Deque<Node<T>> items = maxStack.get(value);
+    if (items != null) {
+      if (!items.isEmpty()) items.pop();
+      if (items.isEmpty()) maxStack.remove(value);
     }
+    return value;
+  }
 
-    public T top() {
-        return stack.peek();
-    }
+  public T top() {
+    return stack.peek();
+  }
 
-    public T getMax() {
-        if (maxStack.isEmpty()) return null;
-        return maxStack.lastKey();
-    }
+  public T getMax() {
+    if (maxStack.isEmpty()) return null;
+    return maxStack.lastKey();
+  }
 
-    public T popMax() {
-        Map.Entry<T, Deque<Node<T>>> entry = maxStack.lastEntry();
-        if (entry == null) return null;
-        Deque<Node<T>> items = entry.getValue();
-        if (items != null && !items.isEmpty()) {
-            Node<T> nodeToRemove = items.pop();
-            if (items.isEmpty()) maxStack.remove(entry.getKey());
-            stack.removeNode(nodeToRemove);
-        }
-        return entry.getKey();
+  public T popMax() {
+    Map.Entry<T, Deque<Node<T>>> entry = maxStack.lastEntry();
+    if (entry == null) return null;
+    Deque<Node<T>> items = entry.getValue();
+    if (items != null && !items.isEmpty()) {
+      Node<T> nodeToRemove = items.pop();
+      if (items.isEmpty()) maxStack.remove(entry.getKey());
+      stack.removeNode(nodeToRemove);
     }
+    return entry.getKey();
+  }
 }

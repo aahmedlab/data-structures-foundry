@@ -1,5 +1,12 @@
 package dev.aahmedlab.ratelimiter;
 
+import static org.junit.jupiter.api.Assertions.*;
+
+import java.util.concurrent.CountDownLatch;
+import java.util.concurrent.ExecutorService;
+import java.util.concurrent.Executors;
+import java.util.concurrent.TimeUnit;
+import java.util.concurrent.atomic.AtomicInteger;
 import org.junit.jupiter.api.BeforeEach;
 import org.junit.jupiter.api.RepeatedTest;
 import org.junit.jupiter.api.Test;
@@ -7,531 +14,523 @@ import org.junit.jupiter.params.ParameterizedTest;
 import org.junit.jupiter.params.provider.CsvSource;
 import org.junit.jupiter.params.provider.ValueSource;
 
-import java.util.concurrent.CountDownLatch;
-import java.util.concurrent.ExecutorService;
-import java.util.concurrent.Executors;
-import java.util.concurrent.TimeUnit;
-import java.util.concurrent.atomic.AtomicInteger;
-
-import static org.junit.jupiter.api.Assertions.*;
-
 class ConcurrentTokenBucketTest {
 
-    private ConcurrentTokenBucket tokenBucket;
+  private ConcurrentTokenBucket tokenBucket;
 
-    @BeforeEach
-    void setUp() {
-        tokenBucket = new ConcurrentTokenBucket(10, 5);
+  @BeforeEach
+  void setUp() {
+    tokenBucket = new ConcurrentTokenBucket(10, 5);
+  }
+
+  @Test
+  void testInitialState() {
+    ConcurrentTokenBucket bucket = new ConcurrentTokenBucket(10, 5);
+    assertTrue(bucket.allowRequest());
+  }
+
+  @Test
+  void testConsumeAllTokens() {
+    for (int i = 0; i < 10; i++) {
+      assertTrue(tokenBucket.allowRequest());
+    }
+    assertFalse(tokenBucket.allowRequest());
+  }
+
+  @Test
+  void testRefillOverTime() throws InterruptedException {
+    for (int i = 0; i < 10; i++) {
+      assertTrue(tokenBucket.allowRequest());
+    }
+    assertFalse(tokenBucket.allowRequest());
+
+    Thread.sleep(1000);
+
+    for (int i = 0; i < 5; i++) {
+      assertTrue(tokenBucket.allowRequest());
+    }
+    assertFalse(tokenBucket.allowRequest());
+  }
+
+  @Test
+  void testBucketNeverExceedsCapacity() throws InterruptedException {
+    for (int i = 0; i < 5; i++) {
+      assertTrue(tokenBucket.allowRequest());
     }
 
-    @Test
-    void testInitialState() {
-        ConcurrentTokenBucket bucket = new ConcurrentTokenBucket(10, 5);
-        assertTrue(bucket.allowRequest());
+    Thread.sleep(3000);
+
+    for (int i = 0; i < 10; i++) {
+      assertTrue(tokenBucket.allowRequest());
     }
+    assertFalse(tokenBucket.allowRequest());
+  }
 
-    @Test
-    void testConsumeAllTokens() {
-        for (int i = 0; i < 10; i++) {
-            assertTrue(tokenBucket.allowRequest());
-        }
-        assertFalse(tokenBucket.allowRequest());
+  @Test
+  void testZeroRefillRate() {
+    ConcurrentTokenBucket bucket = new ConcurrentTokenBucket(5, 0);
+    for (int i = 0; i < 5; i++) {
+      assertTrue(bucket.allowRequest());
     }
+    assertFalse(bucket.allowRequest());
+  }
 
-    @Test
-    void testRefillOverTime() throws InterruptedException {
-        for (int i = 0; i < 10; i++) {
-            assertTrue(tokenBucket.allowRequest());
-        }
-        assertFalse(tokenBucket.allowRequest());
+  @Test
+  void testCapacityOne() {
+    ConcurrentTokenBucket bucket = new ConcurrentTokenBucket(1, 1);
+    assertTrue(bucket.allowRequest());
+    assertFalse(bucket.allowRequest());
+  }
 
-        Thread.sleep(1000);
-
-        for (int i = 0; i < 5; i++) {
-            assertTrue(tokenBucket.allowRequest());
-        }
-        assertFalse(tokenBucket.allowRequest());
+  @ParameterizedTest
+  @CsvSource({"5, 1, 5", "10, 5, 10", "20, 10, 20", "100, 50, 100"})
+  void testDifferentCapacitiesAndRefillRates(
+      int capacity, int refillRate, int expectedInitialTokens) {
+    ConcurrentTokenBucket bucket = new ConcurrentTokenBucket(capacity, refillRate);
+    int allowedCount = 0;
+    for (int i = 0; i < expectedInitialTokens + 1; i++) {
+      if (bucket.allowRequest()) {
+        allowedCount++;
+      }
     }
+    assertEquals(expectedInitialTokens, allowedCount);
+  }
 
-    @Test
-    void testBucketNeverExceedsCapacity() throws InterruptedException {
-        for (int i = 0; i < 5; i++) {
-            assertTrue(tokenBucket.allowRequest());
-        }
+  @Test
+  void testConcurrentRequests() throws InterruptedException {
+    int numThreads = 10;
+    int requestsPerThread = 10;
 
-        Thread.sleep(3000);
+    ExecutorService executor = Executors.newFixedThreadPool(numThreads);
+    CountDownLatch latch = new CountDownLatch(numThreads);
+    AtomicInteger allowedCount = new AtomicInteger(0);
 
-        for (int i = 0; i < 10; i++) {
-            assertTrue(tokenBucket.allowRequest());
-        }
-        assertFalse(tokenBucket.allowRequest());
-    }
-
-    @Test
-    void testZeroRefillRate() {
-        ConcurrentTokenBucket bucket = new ConcurrentTokenBucket(5, 0);
-        for (int i = 0; i < 5; i++) {
-            assertTrue(bucket.allowRequest());
-        }
-        assertFalse(bucket.allowRequest());
-    }
-
-    @Test
-    void testCapacityOne() {
-        ConcurrentTokenBucket bucket = new ConcurrentTokenBucket(1, 1);
-        assertTrue(bucket.allowRequest());
-        assertFalse(bucket.allowRequest());
-    }
-
-    @ParameterizedTest
-    @CsvSource({"5, 1, 5", "10, 5, 10", "20, 10, 20", "100, 50, 100"})
-    void testDifferentCapacitiesAndRefillRates(
-            int capacity, int refillRate, int expectedInitialTokens) {
-        ConcurrentTokenBucket bucket = new ConcurrentTokenBucket(capacity, refillRate);
-        int allowedCount = 0;
-        for (int i = 0; i < expectedInitialTokens + 1; i++) {
-            if (bucket.allowRequest()) {
-                allowedCount++;
+    for (int i = 0; i < numThreads; i++) {
+      executor.submit(
+          () -> {
+            for (int j = 0; j < requestsPerThread; j++) {
+              if (tokenBucket.allowRequest()) {
+                allowedCount.incrementAndGet();
+              }
             }
-        }
-        assertEquals(expectedInitialTokens, allowedCount);
+            latch.countDown();
+          });
     }
 
-    @Test
-    void testConcurrentRequests() throws InterruptedException {
-        int numThreads = 10;
-        int requestsPerThread = 10;
+    latch.await(5, TimeUnit.SECONDS);
+    executor.shutdown();
 
-        ExecutorService executor = Executors.newFixedThreadPool(numThreads);
-        CountDownLatch latch = new CountDownLatch(numThreads);
-        AtomicInteger allowedCount = new AtomicInteger(0);
+    assertEquals(10, allowedCount.get());
+  }
 
-        for (int i = 0; i < numThreads; i++) {
-            executor.submit(
-                    () -> {
-                        for (int j = 0; j < requestsPerThread; j++) {
-                            if (tokenBucket.allowRequest()) {
-                                allowedCount.incrementAndGet();
-                            }
-                        }
-                        latch.countDown();
-                    });
-        }
+  @Test
+  void testConcurrentRequestsExceedingCapacity() throws InterruptedException {
+    int numThreads = 20;
+    int requestsPerThread = 10;
 
-        latch.await(5, TimeUnit.SECONDS);
-        executor.shutdown();
+    ExecutorService executor = Executors.newFixedThreadPool(numThreads);
+    CountDownLatch latch = new CountDownLatch(numThreads);
+    AtomicInteger allowedCount = new AtomicInteger(0);
 
-        assertEquals(10, allowedCount.get());
+    for (int i = 0; i < numThreads; i++) {
+      executor.submit(
+          () -> {
+            for (int j = 0; j < requestsPerThread; j++) {
+              if (tokenBucket.allowRequest()) {
+                allowedCount.incrementAndGet();
+              }
+            }
+            latch.countDown();
+          });
     }
 
-    @Test
-    void testConcurrentRequestsExceedingCapacity() throws InterruptedException {
-        int numThreads = 20;
-        int requestsPerThread = 10;
+    latch.await(5, TimeUnit.SECONDS);
+    executor.shutdown();
 
-        ExecutorService executor = Executors.newFixedThreadPool(numThreads);
-        CountDownLatch latch = new CountDownLatch(numThreads);
-        AtomicInteger allowedCount = new AtomicInteger(0);
+    assertEquals(10, allowedCount.get());
+  }
 
-        for (int i = 0; i < numThreads; i++) {
-            executor.submit(
-                    () -> {
-                        for (int j = 0; j < requestsPerThread; j++) {
-                            if (tokenBucket.allowRequest()) {
-                                allowedCount.incrementAndGet();
-                            }
-                        }
-                        latch.countDown();
-                    });
-        }
+  @RepeatedTest(10)
+  void testConcurrentRequestsSameTime() throws InterruptedException {
+    int numThreads = 15;
+    int requestsPerThread = 5;
 
-        latch.await(5, TimeUnit.SECONDS);
-        executor.shutdown();
+    ExecutorService executor = Executors.newFixedThreadPool(numThreads);
+    CountDownLatch startLatch = new CountDownLatch(1);
+    CountDownLatch endLatch = new CountDownLatch(numThreads);
+    AtomicInteger allowedCount = new AtomicInteger(0);
 
-        assertEquals(10, allowedCount.get());
+    for (int i = 0; i < numThreads; i++) {
+      executor.submit(
+          () -> {
+            try {
+              startLatch.await();
+              for (int j = 0; j < requestsPerThread; j++) {
+                if (tokenBucket.allowRequest()) {
+                  allowedCount.incrementAndGet();
+                }
+              }
+            } catch (InterruptedException e) {
+              Thread.currentThread().interrupt();
+            } finally {
+              endLatch.countDown();
+            }
+          });
     }
 
-    @RepeatedTest(10)
-    void testConcurrentRequestsSameTime() throws InterruptedException {
-        int numThreads = 15;
-        int requestsPerThread = 5;
+    startLatch.countDown();
+    endLatch.await(10, TimeUnit.SECONDS);
+    executor.shutdown();
 
-        ExecutorService executor = Executors.newFixedThreadPool(numThreads);
-        CountDownLatch startLatch = new CountDownLatch(1);
-        CountDownLatch endLatch = new CountDownLatch(numThreads);
-        AtomicInteger allowedCount = new AtomicInteger(0);
+    assertEquals(10, allowedCount.get());
+  }
 
-        for (int i = 0; i < numThreads; i++) {
-            executor.submit(
-                    () -> {
-                        try {
-                            startLatch.await();
-                            for (int j = 0; j < requestsPerThread; j++) {
-                                if (tokenBucket.allowRequest()) {
-                                    allowedCount.incrementAndGet();
-                                }
-                            }
-                        } catch (InterruptedException e) {
-                            Thread.currentThread().interrupt();
-                        } finally {
-                            endLatch.countDown();
-                        }
-                    });
-        }
+  @Test
+  void testConcurrentRequestsWithRefill() throws InterruptedException {
+    int numThreads = 5;
+    int requestsPerThread = 20;
 
-        startLatch.countDown();
-        endLatch.await(10, TimeUnit.SECONDS);
-        executor.shutdown();
+    ExecutorService executor = Executors.newFixedThreadPool(numThreads);
+    CountDownLatch latch = new CountDownLatch(numThreads);
+    AtomicInteger allowedCount = new AtomicInteger(0);
 
-        assertEquals(10, allowedCount.get());
+    for (int i = 0; i < numThreads; i++) {
+      executor.submit(
+          () -> {
+            for (int j = 0; j < requestsPerThread; j++) {
+              if (tokenBucket.allowRequest()) {
+                allowedCount.incrementAndGet();
+              }
+              try {
+                Thread.sleep(50);
+              } catch (InterruptedException e) {
+                Thread.currentThread().interrupt();
+              }
+            }
+            latch.countDown();
+          });
     }
 
-    @Test
-    void testConcurrentRequestsWithRefill() throws InterruptedException {
-        int numThreads = 5;
-        int requestsPerThread = 20;
+    latch.await(15, TimeUnit.SECONDS);
+    executor.shutdown();
 
-        ExecutorService executor = Executors.newFixedThreadPool(numThreads);
-        CountDownLatch latch = new CountDownLatch(numThreads);
-        AtomicInteger allowedCount = new AtomicInteger(0);
+    assertTrue(allowedCount.get() > 10, "Should have more than initial capacity due to refill");
+  }
 
-        for (int i = 0; i < numThreads; i++) {
-            executor.submit(
-                    () -> {
-                        for (int j = 0; j < requestsPerThread; j++) {
-                            if (tokenBucket.allowRequest()) {
-                                allowedCount.incrementAndGet();
-                            }
-                            try {
-                                Thread.sleep(50);
-                            } catch (InterruptedException e) {
-                                Thread.currentThread().interrupt();
-                            }
-                        }
-                        latch.countDown();
-                    });
-        }
+  @Test
+  void testNoRaceConditionOnBucketState() throws InterruptedException {
+    int numThreads = 20;
+    int requestsPerThread = 100;
 
-        latch.await(15, TimeUnit.SECONDS);
-        executor.shutdown();
+    ExecutorService executor = Executors.newFixedThreadPool(numThreads);
+    CountDownLatch latch = new CountDownLatch(numThreads);
+    AtomicInteger allowedCount = new AtomicInteger(0);
+    AtomicInteger deniedCount = new AtomicInteger(0);
 
-        assertTrue(allowedCount.get() > 10, "Should have more than initial capacity due to refill");
+    for (int i = 0; i < numThreads; i++) {
+      executor.submit(
+          () -> {
+            for (int j = 0; j < requestsPerThread; j++) {
+              if (tokenBucket.allowRequest()) {
+                allowedCount.incrementAndGet();
+              } else {
+                deniedCount.incrementAndGet();
+              }
+            }
+            latch.countDown();
+          });
     }
 
-    @Test
-    void testNoRaceConditionOnBucketState() throws InterruptedException {
-        int numThreads = 20;
-        int requestsPerThread = 100;
+    latch.await(10, TimeUnit.SECONDS);
+    executor.shutdown();
 
-        ExecutorService executor = Executors.newFixedThreadPool(numThreads);
-        CountDownLatch latch = new CountDownLatch(numThreads);
-        AtomicInteger allowedCount = new AtomicInteger(0);
-        AtomicInteger deniedCount = new AtomicInteger(0);
+    assertEquals(numThreads * requestsPerThread, allowedCount.get() + deniedCount.get());
+    assertTrue(allowedCount.get() >= 10, "At least capacity requests should be allowed");
+  }
 
-        for (int i = 0; i < numThreads; i++) {
-            executor.submit(
-                    () -> {
-                        for (int j = 0; j < requestsPerThread; j++) {
-                            if (tokenBucket.allowRequest()) {
-                                allowedCount.incrementAndGet();
-                            } else {
-                                deniedCount.incrementAndGet();
-                            }
-                        }
-                        latch.countDown();
-                    });
-        }
+  @Test
+  void testConcurrentEmptyBucketBehavior() throws InterruptedException {
+    ConcurrentTokenBucket bucket = new ConcurrentTokenBucket(5, 1);
 
-        latch.await(10, TimeUnit.SECONDS);
-        executor.shutdown();
-
-        assertEquals(numThreads * requestsPerThread, allowedCount.get() + deniedCount.get());
-        assertTrue(allowedCount.get() >= 10, "At least capacity requests should be allowed");
+    for (int i = 0; i < 5; i++) {
+      assertTrue(bucket.allowRequest());
     }
 
-    @Test
-    void testConcurrentEmptyBucketBehavior() throws InterruptedException {
-        ConcurrentTokenBucket bucket = new ConcurrentTokenBucket(5, 1);
+    int numThreads = 10;
+    int requestsPerThread = 10;
 
-        for (int i = 0; i < 5; i++) {
-            assertTrue(bucket.allowRequest());
-        }
+    ExecutorService executor = Executors.newFixedThreadPool(numThreads);
+    CountDownLatch latch = new CountDownLatch(numThreads);
+    AtomicInteger allowedCount = new AtomicInteger(0);
 
-        int numThreads = 10;
-        int requestsPerThread = 10;
-
-        ExecutorService executor = Executors.newFixedThreadPool(numThreads);
-        CountDownLatch latch = new CountDownLatch(numThreads);
-        AtomicInteger allowedCount = new AtomicInteger(0);
-
-        for (int i = 0; i < numThreads; i++) {
-            executor.submit(
-                    () -> {
-                        for (int j = 0; j < requestsPerThread; j++) {
-                            if (bucket.allowRequest()) {
-                                allowedCount.incrementAndGet();
-                            }
-                        }
-                        latch.countDown();
-                    });
-        }
-
-        latch.await(5, TimeUnit.SECONDS);
-        executor.shutdown();
-
-        assertEquals(0, allowedCount.get());
+    for (int i = 0; i < numThreads; i++) {
+      executor.submit(
+          () -> {
+            for (int j = 0; j < requestsPerThread; j++) {
+              if (bucket.allowRequest()) {
+                allowedCount.incrementAndGet();
+              }
+            }
+            latch.countDown();
+          });
     }
 
-    @Test
-    void testHighConcurrencyStressTest() throws InterruptedException {
-        int numThreads = 50;
-        int requestsPerThread = 100;
+    latch.await(5, TimeUnit.SECONDS);
+    executor.shutdown();
 
-        ExecutorService executor = Executors.newFixedThreadPool(numThreads);
-        CountDownLatch latch = new CountDownLatch(numThreads);
-        AtomicInteger allowedCount = new AtomicInteger(0);
+    assertEquals(0, allowedCount.get());
+  }
 
-        for (int i = 0; i < numThreads; i++) {
-            executor.submit(
-                    () -> {
-                        for (int j = 0; j < requestsPerThread; j++) {
-                            if (tokenBucket.allowRequest()) {
-                                allowedCount.incrementAndGet();
-                            }
-                        }
-                        latch.countDown();
-                    });
-        }
+  @Test
+  void testHighConcurrencyStressTest() throws InterruptedException {
+    int numThreads = 50;
+    int requestsPerThread = 100;
 
-        latch.await(30, TimeUnit.SECONDS);
-        executor.shutdown();
+    ExecutorService executor = Executors.newFixedThreadPool(numThreads);
+    CountDownLatch latch = new CountDownLatch(numThreads);
+    AtomicInteger allowedCount = new AtomicInteger(0);
 
-        assertEquals(10, allowedCount.get());
+    for (int i = 0; i < numThreads; i++) {
+      executor.submit(
+          () -> {
+            for (int j = 0; j < requestsPerThread; j++) {
+              if (tokenBucket.allowRequest()) {
+                allowedCount.incrementAndGet();
+              }
+            }
+            latch.countDown();
+          });
     }
 
-    @Test
-    void testConcurrentRefillAndConsumption() throws InterruptedException {
-        int consumerThreads = 5;
-        int requestsPerConsumer = 50;
+    latch.await(30, TimeUnit.SECONDS);
+    executor.shutdown();
 
-        ExecutorService executor = Executors.newFixedThreadPool(consumerThreads);
-        CountDownLatch latch = new CountDownLatch(consumerThreads);
-        AtomicInteger allowedCount = new AtomicInteger(0);
+    assertEquals(10, allowedCount.get());
+  }
 
-        for (int i = 0; i < consumerThreads; i++) {
-            executor.submit(
-                    () -> {
-                        for (int j = 0; j < requestsPerConsumer; j++) {
-                            if (tokenBucket.allowRequest()) {
-                                allowedCount.incrementAndGet();
-                            }
-                            try {
-                                Thread.sleep(100);
-                            } catch (InterruptedException e) {
-                                Thread.currentThread().interrupt();
-                            }
-                        }
-                        latch.countDown();
-                    });
-        }
+  @Test
+  void testConcurrentRefillAndConsumption() throws InterruptedException {
+    int consumerThreads = 5;
+    int requestsPerConsumer = 50;
 
-        latch.await(20, TimeUnit.SECONDS);
-        executor.shutdown();
+    ExecutorService executor = Executors.newFixedThreadPool(consumerThreads);
+    CountDownLatch latch = new CountDownLatch(consumerThreads);
+    AtomicInteger allowedCount = new AtomicInteger(0);
 
-        assertTrue(allowedCount.get() > 10, "Should have more than initial capacity due to refill");
+    for (int i = 0; i < consumerThreads; i++) {
+      executor.submit(
+          () -> {
+            for (int j = 0; j < requestsPerConsumer; j++) {
+              if (tokenBucket.allowRequest()) {
+                allowedCount.incrementAndGet();
+              }
+              try {
+                Thread.sleep(100);
+              } catch (InterruptedException e) {
+                Thread.currentThread().interrupt();
+              }
+            }
+            latch.countDown();
+          });
     }
 
-    @Test
-    void testConcurrentPartialRefill() throws InterruptedException {
-        for (int i = 0; i < 10; i++) {
-            assertTrue(tokenBucket.allowRequest());
-        }
-        assertFalse(tokenBucket.allowRequest());
+    latch.await(20, TimeUnit.SECONDS);
+    executor.shutdown();
 
-        Thread.sleep(200);
+    assertTrue(allowedCount.get() > 10, "Should have more than initial capacity due to refill");
+  }
 
-        int numThreads = 5;
-        ExecutorService executor = Executors.newFixedThreadPool(numThreads);
-        CountDownLatch latch = new CountDownLatch(numThreads);
-        AtomicInteger allowedCount = new AtomicInteger(0);
+  @Test
+  void testConcurrentPartialRefill() throws InterruptedException {
+    for (int i = 0; i < 10; i++) {
+      assertTrue(tokenBucket.allowRequest());
+    }
+    assertFalse(tokenBucket.allowRequest());
 
-        for (int i = 0; i < numThreads; i++) {
-            executor.submit(
-                    () -> {
-                        if (tokenBucket.allowRequest()) {
-                            allowedCount.incrementAndGet();
-                        }
-                        latch.countDown();
-                    });
-        }
+    Thread.sleep(200);
 
-        latch.await(5, TimeUnit.SECONDS);
-        executor.shutdown();
+    int numThreads = 5;
+    ExecutorService executor = Executors.newFixedThreadPool(numThreads);
+    CountDownLatch latch = new CountDownLatch(numThreads);
+    AtomicInteger allowedCount = new AtomicInteger(0);
 
-        assertEquals(1, allowedCount.get());
+    for (int i = 0; i < numThreads; i++) {
+      executor.submit(
+          () -> {
+            if (tokenBucket.allowRequest()) {
+              allowedCount.incrementAndGet();
+            }
+            latch.countDown();
+          });
     }
 
-    @Test
-    void testConcurrentMultipleRefillCycles() throws InterruptedException {
-        int numThreads = 3;
-        int cycles = 3;
+    latch.await(5, TimeUnit.SECONDS);
+    executor.shutdown();
 
-        ExecutorService executor = Executors.newFixedThreadPool(numThreads);
-        CountDownLatch latch = new CountDownLatch(numThreads);
-        AtomicInteger allowedCount = new AtomicInteger(0);
+    assertEquals(1, allowedCount.get());
+  }
 
-        for (int i = 0; i < numThreads; i++) {
-            executor.submit(
-                    () -> {
-                        for (int cycle = 0; cycle < cycles; cycle++) {
-                            for (int j = 0; j < 10; j++) {
-                                if (tokenBucket.allowRequest()) {
-                                    allowedCount.incrementAndGet();
-                                }
-                            }
-                            try {
-                                // At 5 tokens/sec, a full capacity (10) refill needs ~2s between cycles.
-                                Thread.sleep(2100);
-                            } catch (InterruptedException e) {
-                                Thread.currentThread().interrupt();
-                            }
-                        }
-                        latch.countDown();
-                    });
-        }
+  @Test
+  void testConcurrentMultipleRefillCycles() throws InterruptedException {
+    int numThreads = 3;
+    int cycles = 3;
 
-        latch.await(15, TimeUnit.SECONDS);
-        executor.shutdown();
+    ExecutorService executor = Executors.newFixedThreadPool(numThreads);
+    CountDownLatch latch = new CountDownLatch(numThreads);
+    AtomicInteger allowedCount = new AtomicInteger(0);
 
-        assertTrue(allowedCount.get() >= 30, "Should have at least 3 cycles * 10 tokens");
+    for (int i = 0; i < numThreads; i++) {
+      executor.submit(
+          () -> {
+            for (int cycle = 0; cycle < cycles; cycle++) {
+              for (int j = 0; j < 10; j++) {
+                if (tokenBucket.allowRequest()) {
+                  allowedCount.incrementAndGet();
+                }
+              }
+              try {
+                // At 5 tokens/sec, a full capacity (10) refill needs ~2s between cycles.
+                Thread.sleep(2100);
+              } catch (InterruptedException e) {
+                Thread.currentThread().interrupt();
+              }
+            }
+            latch.countDown();
+          });
     }
 
-    @Test
-    void testAtomicityOfTokenConsumption() throws InterruptedException {
-        int numThreads = 20;
-        int requestsPerThread = 10;
+    latch.await(15, TimeUnit.SECONDS);
+    executor.shutdown();
 
-        ExecutorService executor = Executors.newFixedThreadPool(numThreads);
-        CountDownLatch startLatch = new CountDownLatch(1);
-        CountDownLatch endLatch = new CountDownLatch(numThreads);
-        AtomicInteger allowedCount = new AtomicInteger(0);
+    assertTrue(allowedCount.get() >= 30, "Should have at least 3 cycles * 10 tokens");
+  }
 
-        for (int i = 0; i < numThreads; i++) {
-            executor.submit(
-                    () -> {
-                        try {
-                            startLatch.await();
-                            for (int j = 0; j < requestsPerThread; j++) {
-                                if (tokenBucket.allowRequest()) {
-                                    allowedCount.incrementAndGet();
-                                }
-                            }
-                        } catch (InterruptedException e) {
-                            Thread.currentThread().interrupt();
-                        } finally {
-                            endLatch.countDown();
-                        }
-                    });
-        }
+  @Test
+  void testAtomicityOfTokenConsumption() throws InterruptedException {
+    int numThreads = 20;
+    int requestsPerThread = 10;
 
-        startLatch.countDown();
-        endLatch.await(10, TimeUnit.SECONDS);
-        executor.shutdown();
+    ExecutorService executor = Executors.newFixedThreadPool(numThreads);
+    CountDownLatch startLatch = new CountDownLatch(1);
+    CountDownLatch endLatch = new CountDownLatch(numThreads);
+    AtomicInteger allowedCount = new AtomicInteger(0);
 
-        assertEquals(10, allowedCount.get());
+    for (int i = 0; i < numThreads; i++) {
+      executor.submit(
+          () -> {
+            try {
+              startLatch.await();
+              for (int j = 0; j < requestsPerThread; j++) {
+                if (tokenBucket.allowRequest()) {
+                  allowedCount.incrementAndGet();
+                }
+              }
+            } catch (InterruptedException e) {
+              Thread.currentThread().interrupt();
+            } finally {
+              endLatch.countDown();
+            }
+          });
     }
 
-    @Test
-    void testConcurrentFractionalTokenAccumulation() throws InterruptedException {
-        ConcurrentTokenBucket bucket = new ConcurrentTokenBucket(10, 1);
+    startLatch.countDown();
+    endLatch.await(10, TimeUnit.SECONDS);
+    executor.shutdown();
 
-        for (int i = 0; i < 10; i++) {
-            assertTrue(bucket.allowRequest());
-        }
-        assertFalse(bucket.allowRequest());
+    assertEquals(10, allowedCount.get());
+  }
 
-        Thread.sleep(500);
+  @Test
+  void testConcurrentFractionalTokenAccumulation() throws InterruptedException {
+    ConcurrentTokenBucket bucket = new ConcurrentTokenBucket(10, 1);
 
-        int numThreads = 5;
-        ExecutorService executor = Executors.newFixedThreadPool(numThreads);
-        CountDownLatch latch = new CountDownLatch(numThreads);
-        AtomicInteger allowedCount = new AtomicInteger(0);
+    for (int i = 0; i < 10; i++) {
+      assertTrue(bucket.allowRequest());
+    }
+    assertFalse(bucket.allowRequest());
 
-        for (int i = 0; i < numThreads; i++) {
-            executor.submit(
-                    () -> {
-                        if (bucket.allowRequest()) {
-                            allowedCount.incrementAndGet();
-                        }
-                        latch.countDown();
-                    });
-        }
+    Thread.sleep(500);
 
-        latch.await(5, TimeUnit.SECONDS);
-        executor.shutdown();
+    int numThreads = 5;
+    ExecutorService executor = Executors.newFixedThreadPool(numThreads);
+    CountDownLatch latch = new CountDownLatch(numThreads);
+    AtomicInteger allowedCount = new AtomicInteger(0);
 
-        assertEquals(0, allowedCount.get());
+    for (int i = 0; i < numThreads; i++) {
+      executor.submit(
+          () -> {
+            if (bucket.allowRequest()) {
+              allowedCount.incrementAndGet();
+            }
+            latch.countDown();
+          });
     }
 
-    @ParameterizedTest
-    @ValueSource(ints = {1, 5, 10, 50, 100})
-    void testConcurrentVariousCapacities(int capacity) throws InterruptedException {
-        // refillRate 0 disables time-based refill, so "exactly capacity granted" is deterministic.
-        // With a non-zero rate the bucket may legitimately refill a token mid-run on a slow runner,
-        // granting capacity + 1 and making the assertion flaky.
-        ConcurrentTokenBucket bucket = new ConcurrentTokenBucket(capacity, 0);
-        int numThreads = 10;
-        int requestsPerThread = capacity / 2 + 5;
+    latch.await(5, TimeUnit.SECONDS);
+    executor.shutdown();
 
-        ExecutorService executor = Executors.newFixedThreadPool(numThreads);
-        CountDownLatch latch = new CountDownLatch(numThreads);
-        AtomicInteger allowedCount = new AtomicInteger(0);
+    assertEquals(0, allowedCount.get());
+  }
 
-        for (int i = 0; i < numThreads; i++) {
-            executor.submit(
-                    () -> {
-                        for (int j = 0; j < requestsPerThread; j++) {
-                            if (bucket.allowRequest()) {
-                                allowedCount.incrementAndGet();
-                            }
-                        }
-                        latch.countDown();
-                    });
-        }
+  @ParameterizedTest
+  @ValueSource(ints = {1, 5, 10, 50, 100})
+  void testConcurrentVariousCapacities(int capacity) throws InterruptedException {
+    // refillRate 0 disables time-based refill, so "exactly capacity granted" is deterministic.
+    // With a non-zero rate the bucket may legitimately refill a token mid-run on a slow runner,
+    // granting capacity + 1 and making the assertion flaky.
+    ConcurrentTokenBucket bucket = new ConcurrentTokenBucket(capacity, 0);
+    int numThreads = 10;
+    int requestsPerThread = capacity / 2 + 5;
 
-        latch.await(10, TimeUnit.SECONDS);
-        executor.shutdown();
+    ExecutorService executor = Executors.newFixedThreadPool(numThreads);
+    CountDownLatch latch = new CountDownLatch(numThreads);
+    AtomicInteger allowedCount = new AtomicInteger(0);
 
-        assertEquals(capacity, allowedCount.get());
+    for (int i = 0; i < numThreads; i++) {
+      executor.submit(
+          () -> {
+            for (int j = 0; j < requestsPerThread; j++) {
+              if (bucket.allowRequest()) {
+                allowedCount.incrementAndGet();
+              }
+            }
+            latch.countDown();
+          });
     }
 
-    @Test
-    void testConcurrentLargeCapacity() throws InterruptedException {
-        // refillRate 0 disables refill so the run cannot grant more than the initial 1000 tokens
-        // (a non-zero rate refills ~1 token per 10 ms, over-granting on a slow runner).
-        ConcurrentTokenBucket bucket = new ConcurrentTokenBucket(1000, 0);
-        int numThreads = 20;
-        int requestsPerThread = 100;
+    latch.await(10, TimeUnit.SECONDS);
+    executor.shutdown();
 
-        ExecutorService executor = Executors.newFixedThreadPool(numThreads);
-        CountDownLatch latch = new CountDownLatch(numThreads);
-        AtomicInteger allowedCount = new AtomicInteger(0);
+    assertEquals(capacity, allowedCount.get());
+  }
 
-        for (int i = 0; i < numThreads; i++) {
-            executor.submit(
-                    () -> {
-                        for (int j = 0; j < requestsPerThread; j++) {
-                            if (bucket.allowRequest()) {
-                                allowedCount.incrementAndGet();
-                            }
-                        }
-                        latch.countDown();
-                    });
-        }
+  @Test
+  void testConcurrentLargeCapacity() throws InterruptedException {
+    // refillRate 0 disables refill so the run cannot grant more than the initial 1000 tokens
+    // (a non-zero rate refills ~1 token per 10 ms, over-granting on a slow runner).
+    ConcurrentTokenBucket bucket = new ConcurrentTokenBucket(1000, 0);
+    int numThreads = 20;
+    int requestsPerThread = 100;
 
-        latch.await(15, TimeUnit.SECONDS);
-        executor.shutdown();
+    ExecutorService executor = Executors.newFixedThreadPool(numThreads);
+    CountDownLatch latch = new CountDownLatch(numThreads);
+    AtomicInteger allowedCount = new AtomicInteger(0);
 
-        assertEquals(1000, allowedCount.get());
+    for (int i = 0; i < numThreads; i++) {
+      executor.submit(
+          () -> {
+            for (int j = 0; j < requestsPerThread; j++) {
+              if (bucket.allowRequest()) {
+                allowedCount.incrementAndGet();
+              }
+            }
+            latch.countDown();
+          });
     }
+
+    latch.await(15, TimeUnit.SECONDS);
+    executor.shutdown();
+
+    assertEquals(1000, allowedCount.get());
+  }
 }

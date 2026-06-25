@@ -16,7 +16,6 @@ package dev.aahmedlab.hitcounter;
  * </ul>
  *
  * @param timestamp the timestamp (in seconds) these hits were recorded at
- * @param count     the number of hits recorded at {@code timestamp}
+ * @param count the number of hits recorded at {@code timestamp}
  */
-public record Hit(int timestamp, int count) {
-}
+public record Hit(int timestamp, int count) {}

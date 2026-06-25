@@ -26,33 +26,33 @@ package dev.aahmedlab.ratelimiter;
  * </ul>
  */
 public class ConcurrentFixedWindow {
-    private final int capacity;
-    private final long windowSizeMillis;
-    private final Object lock = new Object();
-    private long tokens = 0;
-    private long windowStartTime;
+  private final int capacity;
+  private final long windowSizeMillis;
+  private final Object lock = new Object();
+  private long tokens = 0;
+  private long windowStartTime;
 
-    public ConcurrentFixedWindow(int capacity, long windowSizeMillis) {
-        if (capacity <= 0 || windowSizeMillis <= 0)
-            throw new IllegalArgumentException("capacity and windowSizeMillis cannot be <= 0");
-        this.capacity = capacity;
-        this.windowSizeMillis = windowSizeMillis;
-        this.windowStartTime = System.currentTimeMillis();
-    }
+  public ConcurrentFixedWindow(int capacity, long windowSizeMillis) {
+    if (capacity <= 0 || windowSizeMillis <= 0)
+      throw new IllegalArgumentException("capacity and windowSizeMillis cannot be <= 0");
+    this.capacity = capacity;
+    this.windowSizeMillis = windowSizeMillis;
+    this.windowStartTime = System.currentTimeMillis();
+  }
 
-    public boolean allowRequest() {
-        synchronized (lock) {
-            long now = System.currentTimeMillis();
-            long elapsed = (now - windowStartTime);
-            if (elapsed >= windowSizeMillis) {
-                windowStartTime = now;
-                tokens = 0;
-            }
-            if (tokens < capacity) {
-                tokens++;
-                return true;
-            }
-            return false;
-        }
+  public boolean allowRequest() {
+    synchronized (lock) {
+      long now = System.currentTimeMillis();
+      long elapsed = (now - windowStartTime);
+      if (elapsed >= windowSizeMillis) {
+        windowStartTime = now;
+        tokens = 0;
+      }
+      if (tokens < capacity) {
+        tokens++;
+        return true;
+      }
+      return false;
     }
+  }
 }

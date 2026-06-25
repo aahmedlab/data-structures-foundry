@@ -30,30 +30,30 @@ import java.util.Deque;
  * </ul>
  */
 public class SlidingWindowLog {
-    private final int capacity;
-    private final long windowSizeMillis;
-    private final Deque<Long> timestamps = new ArrayDeque<>();
-    private final Object lock = new Object();
+  private final int capacity;
+  private final long windowSizeMillis;
+  private final Deque<Long> timestamps = new ArrayDeque<>();
+  private final Object lock = new Object();
 
-    public SlidingWindowLog(int capacity, long windowSizeMillis) {
-        if (capacity <= 0 || windowSizeMillis <= 0)
-            throw new IllegalArgumentException("capacity and windowSizeMillis cannot be <= 0");
-        this.capacity = capacity;
-        this.windowSizeMillis = windowSizeMillis;
-    }
+  public SlidingWindowLog(int capacity, long windowSizeMillis) {
+    if (capacity <= 0 || windowSizeMillis <= 0)
+      throw new IllegalArgumentException("capacity and windowSizeMillis cannot be <= 0");
+    this.capacity = capacity;
+    this.windowSizeMillis = windowSizeMillis;
+  }
 
-    public boolean allowRequest() {
-        synchronized (lock) {
-            long now = System.currentTimeMillis();
-            long windowStart = now - windowSizeMillis;
-            while (!timestamps.isEmpty() && timestamps.peekFirst() <= windowStart) {
-                timestamps.pollFirst();
-            }
-            if (timestamps.size() < capacity) {
-                timestamps.addLast(now);
-                return true;
-            }
-            return false;
-        }
+  public boolean allowRequest() {
+    synchronized (lock) {
+      long now = System.currentTimeMillis();
+      long windowStart = now - windowSizeMillis;
+      while (!timestamps.isEmpty() && timestamps.peekFirst() <= windowStart) {
+        timestamps.pollFirst();
+      }
+      if (timestamps.size() < capacity) {
+        timestamps.addLast(now);
+        return true;
+      }
+      return false;
     }
+  }
 }

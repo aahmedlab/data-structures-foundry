@@ -91,7 +91,13 @@ public class ChainingHashMap<K, V> {
   }
 
   private int indexFor(int hash) {
-    return (hash & 0x7fffffff) % N; // strip sign + mod
+      /*
+       The power-of-two design: & (N-1) does
+       the sign-stripping and
+       the range-bounding and
+       the index calculation in one instruction
+       */
+      return hash & (N - 1); // N must be a power of two.
   }
 
   private int spread(K key) {

@@ -30,48 +30,48 @@ package dev.aahmedlab.ratelimiter;
  * </ul>
  */
 public class SlidingWindowCounter {
-  private final int capacity;
-  private final long windowSizeMillis;
-  private long currentWindowStart;
-  private long currentCount = 0;
-  private long previousCount = 0;
-  private final Object lock = new Object();
+    private final int capacity;
+    private final long windowSizeMillis;
+    private final Object lock = new Object();
+    private long currentWindowStart;
+    private long currentCount = 0;
+    private long previousCount = 0;
 
-  public SlidingWindowCounter(int capacity, long windowSizeMillis) {
-    if (capacity <= 0 || windowSizeMillis <= 0)
-      throw new IllegalArgumentException("capacity and windowSizeMillis cannot be <= 0");
-    this.capacity = capacity;
-    this.windowSizeMillis = windowSizeMillis;
-    this.currentWindowStart = System.currentTimeMillis();
-  }
-
-  public boolean allowRequest() {
-    synchronized (lock) {
-      long now = System.currentTimeMillis();
-      advanceWindow(now);
-
-      double elapsedInCurrent = now - currentWindowStart;
-      double previousWeight = (windowSizeMillis - elapsedInCurrent) / windowSizeMillis;
-      double estimatedCount = previousCount * previousWeight + currentCount;
-
-      if (estimatedCount < capacity) {
-        currentCount++;
-        return true;
-      }
-      return false;
+    public SlidingWindowCounter(int capacity, long windowSizeMillis) {
+        if (capacity <= 0 || windowSizeMillis <= 0)
+            throw new IllegalArgumentException("capacity and windowSizeMillis cannot be <= 0");
+        this.capacity = capacity;
+        this.windowSizeMillis = windowSizeMillis;
+        this.currentWindowStart = System.currentTimeMillis();
     }
-  }
 
-  private void advanceWindow(long now) {
-    long elapsedWindows = (now - currentWindowStart) / windowSizeMillis;
-    if (elapsedWindows == 1) {
-      previousCount = currentCount;
-      currentCount = 0;
-      currentWindowStart += windowSizeMillis;
-    } else if (elapsedWindows > 1) {
-      previousCount = 0;
-      currentCount = 0;
-      currentWindowStart += elapsedWindows * windowSizeMillis;
+    public boolean allowRequest() {
+        synchronized (lock) {
+            long now = System.currentTimeMillis();
+            advanceWindow(now);
+
+            double elapsedInCurrent = now - currentWindowStart;
+            double previousWeight = (windowSizeMillis - elapsedInCurrent) / windowSizeMillis;
+            double estimatedCount = previousCount * previousWeight + currentCount;
+
+            if (estimatedCount < capacity) {
+                currentCount++;
+                return true;
+            }
+            return false;
+        }
     }
-  }
+
+    private void advanceWindow(long now) {
+        long elapsedWindows = (now - currentWindowStart) / windowSizeMillis;
+        if (elapsedWindows == 1) {
+            previousCount = currentCount;
+            currentCount = 0;
+            currentWindowStart += windowSizeMillis;
+        } else if (elapsedWindows > 1) {
+            previousCount = 0;
+            currentCount = 0;
+            currentWindowStart += elapsedWindows * windowSizeMillis;
+        }
+    }
 }

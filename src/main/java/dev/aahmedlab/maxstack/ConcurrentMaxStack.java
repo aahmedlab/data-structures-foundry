@@ -37,55 +37,55 @@ import java.util.TreeMap;
  * @param <T> the type of elements in this stack, must be {@link Comparable}
  */
 class ConcurrentMaxStack<T extends Comparable<T>> {
-  private final DoubleLinkedList<T> stack = new DoubleLinkedList<>();
-  private final TreeMap<T, Deque<Node<T>>> maxStack = new TreeMap<>();
-  private final Object lock = new Object();
+    private final DoubleLinkedList<T> stack = new DoubleLinkedList<>();
+    private final TreeMap<T, Deque<Node<T>>> maxStack = new TreeMap<>();
+    private final Object lock = new Object();
 
-  public void push(T value) {
-    synchronized (lock) {
-      Node<T> node = stack.push(value);
-      maxStack.computeIfAbsent(value, _ -> new ArrayDeque<>()).push(node);
+    public void push(T value) {
+        synchronized (lock) {
+            Node<T> node = stack.push(value);
+            maxStack.computeIfAbsent(value, _ -> new ArrayDeque<>()).push(node);
+        }
     }
-  }
 
-  public T pop() {
-    synchronized (lock) {
-      Node<T> node = stack.pop();
-      if (node == null) return null;
-      T value = node.getValue();
-      Deque<Node<T>> items = maxStack.get(value);
-      if (items != null) {
-        if (!items.isEmpty()) items.pop();
-        if (items.isEmpty()) maxStack.remove(value);
-      }
-      return value;
+    public T pop() {
+        synchronized (lock) {
+            Node<T> node = stack.pop();
+            if (node == null) return null;
+            T value = node.getValue();
+            Deque<Node<T>> items = maxStack.get(value);
+            if (items != null) {
+                if (!items.isEmpty()) items.pop();
+                if (items.isEmpty()) maxStack.remove(value);
+            }
+            return value;
+        }
     }
-  }
 
-  public T top() {
-    synchronized (lock) {
-      return stack.peek();
+    public T top() {
+        synchronized (lock) {
+            return stack.peek();
+        }
     }
-  }
 
-  public T getMax() {
-    synchronized (lock) {
-      if (maxStack.isEmpty()) return null;
-      return maxStack.lastKey();
+    public T getMax() {
+        synchronized (lock) {
+            if (maxStack.isEmpty()) return null;
+            return maxStack.lastKey();
+        }
     }
-  }
 
-  public T popMax() {
-    synchronized (lock) {
-      Map.Entry<T, Deque<Node<T>>> entry = maxStack.lastEntry();
-      if (entry == null) return null;
-      Deque<Node<T>> items = entry.getValue();
-      if (items != null && !items.isEmpty()) {
-        Node<T> nodeToRemove = items.pop();
-        if (items.isEmpty()) maxStack.remove(entry.getKey());
-        stack.removeNode(nodeToRemove);
-      }
-      return entry.getKey();
+    public T popMax() {
+        synchronized (lock) {
+            Map.Entry<T, Deque<Node<T>>> entry = maxStack.lastEntry();
+            if (entry == null) return null;
+            Deque<Node<T>> items = entry.getValue();
+            if (items != null && !items.isEmpty()) {
+                Node<T> nodeToRemove = items.pop();
+                if (items.isEmpty()) maxStack.remove(entry.getKey());
+                stack.removeNode(nodeToRemove);
+            }
+            return entry.getKey();
+        }
     }
-  }
 }

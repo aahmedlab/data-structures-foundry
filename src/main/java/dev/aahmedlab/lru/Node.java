@@ -25,13 +25,20 @@ import lombok.Setter;
  * @param <K> the type of the value
  */
 public class Node<T, K> {
-  @Getter private final T key;
-  @Getter @Setter private K value;
-  @Getter @Setter private Node<T, K> prev;
-  @Getter @Setter private Node<T, K> next;
+    @Getter
+    private final T key;
+    @Getter
+    @Setter
+    private K value;
+    @Getter
+    @Setter
+    private Node<T, K> prev;
+    @Getter
+    @Setter
+    private Node<T, K> next;
 
-  public Node(T key, K value) {
-    this.key = key;
-    this.value = value;
-  }
+    public Node(T key, K value) {
+        this.key = key;
+        this.value = value;
+    }
 }

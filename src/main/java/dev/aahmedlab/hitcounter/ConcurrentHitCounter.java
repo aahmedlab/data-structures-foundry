@@ -36,57 +36,57 @@ import java.util.concurrent.atomic.AtomicReference;
  * </ul>
  */
 public class ConcurrentHitCounter {
-  private AtomicReference<Hit>[] hits;
-  private AtomicInteger totalHits;
-  private final int capacity;
+    private final int capacity;
+    private AtomicReference<Hit>[] hits;
+    private AtomicInteger totalHits;
 
-  public ConcurrentHitCounter(int capacity) {
-    this.capacity = capacity;
-    this.hits = new AtomicReference[capacity];
-    for (int i = 0; i < capacity; i++) {
-      this.hits[i] = new AtomicReference<>(null);
-    }
-    this.totalHits = new AtomicInteger(0);
-  }
-
-  public void hit(int timestamp) {
-    int index = timestamp % capacity;
-
-    Hit currentHit;
-    Hit next;
-    do {
-      currentHit = hits[index].get();
-      next = buildNext(currentHit, timestamp);
-    } while (!hits[index].compareAndSet(currentHit, next));
-
-    if (currentHit == null || currentHit.timestamp() == timestamp) {
-      totalHits.incrementAndGet();
-    } else {
-      totalHits.addAndGet(1 - currentHit.count());
-    }
-  }
-
-  private Hit buildNext(Hit currentHit, int timestamp) {
-    if (currentHit != null && currentHit.timestamp() == timestamp) {
-      return new Hit(timestamp, currentHit.count() + 1);
-    } else {
-      return new Hit(timestamp, 1);
-    }
-  }
-
-  public int getHit(int timestamp) {
-    for (int i = 0; i < capacity; i++) {
-      while (true) {
-        Hit currentHit = hits[i].get();
-        if (currentHit == null) break;
-        int diff = timestamp - currentHit.timestamp();
-        if (diff < capacity) break;
-        if (hits[i].compareAndSet(currentHit, null)) {
-          totalHits.addAndGet(-currentHit.count());
-          break;
+    public ConcurrentHitCounter(int capacity) {
+        this.capacity = capacity;
+        this.hits = new AtomicReference[capacity];
+        for (int i = 0; i < capacity; i++) {
+            this.hits[i] = new AtomicReference<>(null);
         }
-      }
+        this.totalHits = new AtomicInteger(0);
     }
-    return totalHits.get();
-  }
+
+    public void hit(int timestamp) {
+        int index = timestamp % capacity;
+
+        Hit currentHit;
+        Hit next;
+        do {
+            currentHit = hits[index].get();
+            next = buildNext(currentHit, timestamp);
+        } while (!hits[index].compareAndSet(currentHit, next));
+
+        if (currentHit == null || currentHit.timestamp() == timestamp) {
+            totalHits.incrementAndGet();
+        } else {
+            totalHits.addAndGet(1 - currentHit.count());
+        }
+    }
+
+    private Hit buildNext(Hit currentHit, int timestamp) {
+        if (currentHit != null && currentHit.timestamp() == timestamp) {
+            return new Hit(timestamp, currentHit.count() + 1);
+        } else {
+            return new Hit(timestamp, 1);
+        }
+    }
+
+    public int getHit(int timestamp) {
+        for (int i = 0; i < capacity; i++) {
+            while (true) {
+                Hit currentHit = hits[i].get();
+                if (currentHit == null) break;
+                int diff = timestamp - currentHit.timestamp();
+                if (diff < capacity) break;
+                if (hits[i].compareAndSet(currentHit, null)) {
+                    totalHits.addAndGet(-currentHit.count());
+                    break;
+                }
+            }
+        }
+        return totalHits.get();
+    }
 }

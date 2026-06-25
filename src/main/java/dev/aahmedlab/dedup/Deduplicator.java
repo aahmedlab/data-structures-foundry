@@ -1,7 +1,10 @@
 package dev.aahmedlab.dedup;
 
 import java.time.Clock;
-import java.util.*;
+import java.util.HashMap;
+import java.util.HashSet;
+import java.util.Map;
+import java.util.Set;
 
 /**
  * A single-threaded TTL-based deduplicator that reports whether a key is being seen for the first
@@ -32,55 +35,55 @@ import java.util.*;
  */
 @SuppressWarnings("unchecked")
 public class Deduplicator<K> {
-  private final Map<K, Long> cache = new HashMap<>();
-  private final Set<K>[] hits;
-  private final Clock clock;
-  private final int ttl;
-  private long lastSweptSecond;
+    private final Map<K, Long> cache = new HashMap<>();
+    private final Set<K>[] hits;
+    private final Clock clock;
+    private final int ttl;
+    private long lastSweptSecond;
 
-  public Deduplicator(int ttl) {
-    this(ttl, Clock.systemUTC());
-  }
-
-  public Deduplicator(int ttl, Clock clock) {
-    this.clock = clock;
-    hits = new HashSet[ttl];
-    this.ttl = ttl;
-    lastSweptSecond = clock.instant().getEpochSecond();
-    for (int i = 0; i < ttl; i++) {
-      hits[i] = new HashSet<>();
+    public Deduplicator(int ttl) {
+        this(ttl, Clock.systemUTC());
     }
-  }
 
-  public boolean isFirstSeen(K key) {
-    long currentTimeSeconds = clock.instant().getEpochSecond();
-    int index = (int) (currentTimeSeconds % hits.length);
-    if (!cache.containsKey(key)) {
-      cache.put(key, currentTimeSeconds);
-      hits[index].add(key);
-      return true;
-    } else {
-      long createdTimeSeconds = cache.get(key);
-      int oldIndex = (int) (createdTimeSeconds % hits.length);
-      if (currentTimeSeconds - createdTimeSeconds > this.ttl) {
-        cache.replace(key, createdTimeSeconds, currentTimeSeconds);
-        hits[oldIndex].remove(key);
-        hits[index].add(key);
-        return true;
-      }
-      return false;
+    public Deduplicator(int ttl, Clock clock) {
+        this.clock = clock;
+        hits = new HashSet[ttl];
+        this.ttl = ttl;
+        lastSweptSecond = clock.instant().getEpochSecond();
+        for (int i = 0; i < ttl; i++) {
+            hits[i] = new HashSet<>();
+        }
     }
-  }
 
-  public void sweeper() {
-    long currentSecond = clock.instant().getEpochSecond();
-    for (long t = lastSweptSecond + 1; t <= currentSecond; t++) {
-      int bucketIndex = (int) (t % hits.length);
-      for (K key : hits[bucketIndex]) {
-        cache.remove(key);
-      }
-      hits[bucketIndex].clear();
+    public boolean isFirstSeen(K key) {
+        long currentTimeSeconds = clock.instant().getEpochSecond();
+        int index = (int) (currentTimeSeconds % hits.length);
+        if (!cache.containsKey(key)) {
+            cache.put(key, currentTimeSeconds);
+            hits[index].add(key);
+            return true;
+        } else {
+            long createdTimeSeconds = cache.get(key);
+            int oldIndex = (int) (createdTimeSeconds % hits.length);
+            if (currentTimeSeconds - createdTimeSeconds > this.ttl) {
+                cache.replace(key, createdTimeSeconds, currentTimeSeconds);
+                hits[oldIndex].remove(key);
+                hits[index].add(key);
+                return true;
+            }
+            return false;
+        }
     }
-    lastSweptSecond = currentSecond;
-  }
+
+    public void sweeper() {
+        long currentSecond = clock.instant().getEpochSecond();
+        for (long t = lastSweptSecond + 1; t <= currentSecond; t++) {
+            int bucketIndex = (int) (t % hits.length);
+            for (K key : hits[bucketIndex]) {
+                cache.remove(key);
+            }
+            hits[bucketIndex].clear();
+        }
+        lastSweptSecond = currentSecond;
+    }
 }

@@ -25,11 +25,17 @@ import lombok.Setter;
  * @param <T> the type of the value held by this node
  */
 public class Node<T> {
-  @Getter @Setter private T value;
-  @Getter @Setter private Node<T> prev;
-  @Getter @Setter private Node<T> next;
+    @Getter
+    @Setter
+    private T value;
+    @Getter
+    @Setter
+    private Node<T> prev;
+    @Getter
+    @Setter
+    private Node<T> next;
 
-  public Node(T value) {
-    this.value = value;
-  }
+    public Node(T value) {
+        this.value = value;
+    }
 }

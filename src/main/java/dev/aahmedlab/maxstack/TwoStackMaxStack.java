@@ -33,32 +33,32 @@ import java.util.Deque;
  * @param <T> the type of elements in this stack, must be {@link Comparable}
  */
 class TwoStackMaxStack<T extends Comparable<T>> {
-  private Deque<T> mainStack = new ArrayDeque<>();
-  private Deque<T> maxStack = new ArrayDeque<>();
+    private Deque<T> mainStack = new ArrayDeque<>();
+    private Deque<T> maxStack = new ArrayDeque<>();
 
-  public void push(T value) {
-    T currentMax = maxStack.peek();
-    mainStack.push(value);
-    if (currentMax == null || value.compareTo(currentMax) >= 0) {
-      maxStack.push(value);
+    public void push(T value) {
+        T currentMax = maxStack.peek();
+        mainStack.push(value);
+        if (currentMax == null || value.compareTo(currentMax) >= 0) {
+            maxStack.push(value);
+        }
     }
-  }
 
-  public T pop() {
-    T top = mainStack.peek();
-    if (top == null) return null;
-    T currentMax = maxStack.peek();
-    if (currentMax != null && top.compareTo(currentMax) == 0) {
-      maxStack.pop();
+    public T pop() {
+        T top = mainStack.peek();
+        if (top == null) return null;
+        T currentMax = maxStack.peek();
+        if (currentMax != null && top.compareTo(currentMax) == 0) {
+            maxStack.pop();
+        }
+        return mainStack.pop();
     }
-    return mainStack.pop();
-  }
 
-  public T peek() {
-    return mainStack.peek();
-  }
+    public T peek() {
+        return mainStack.peek();
+    }
 
-  public T getMax() {
-    return maxStack.peek();
-  }
+    public T getMax() {
+        return maxStack.peek();
+    }
 }

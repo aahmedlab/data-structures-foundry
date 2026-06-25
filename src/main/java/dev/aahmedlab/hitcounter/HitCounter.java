@@ -29,38 +29,38 @@ package dev.aahmedlab.hitcounter;
  * for a concurrent variant.
  */
 public class HitCounter {
-  private Hit[] hits;
-  private int totalHits;
-  private final int capacity;
+    private final int capacity;
+    private Hit[] hits;
+    private int totalHits;
 
-  public HitCounter(int capacity) {
-    this.capacity = capacity;
-    this.hits = new Hit[capacity];
-    this.totalHits = 0;
-  }
-
-  public void hit(int timestamp) {
-    int index = timestamp % capacity;
-    int counter = 1;
-    if (hits[index] != null && hits[index].timestamp() == timestamp) {
-      counter = hits[index].count() + 1;
-    } else if (hits[index] != null && hits[index].timestamp() != timestamp) {
-      totalHits -= hits[index].count();
+    public HitCounter(int capacity) {
+        this.capacity = capacity;
+        this.hits = new Hit[capacity];
+        this.totalHits = 0;
     }
-    hits[index] = new Hit(timestamp, counter);
-    totalHits++;
-  }
 
-  public int getHit(int timestamp) {
-    for (int i = 0; i < capacity; i++) {
-      if (hits[i] != null) {
-        int diff = timestamp - hits[i].timestamp();
-        if (diff >= capacity) {
-          totalHits -= hits[i].count();
-          hits[i] = null;
+    public void hit(int timestamp) {
+        int index = timestamp % capacity;
+        int counter = 1;
+        if (hits[index] != null && hits[index].timestamp() == timestamp) {
+            counter = hits[index].count() + 1;
+        } else if (hits[index] != null && hits[index].timestamp() != timestamp) {
+            totalHits -= hits[index].count();
         }
-      }
+        hits[index] = new Hit(timestamp, counter);
+        totalHits++;
     }
-    return totalHits;
-  }
+
+    public int getHit(int timestamp) {
+        for (int i = 0; i < capacity; i++) {
+            if (hits[i] != null) {
+                int diff = timestamp - hits[i].timestamp();
+                if (diff >= capacity) {
+                    totalHits -= hits[i].count();
+                    hits[i] = null;
+                }
+            }
+        }
+        return totalHits;
+    }
 }

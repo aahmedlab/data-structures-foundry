@@ -29,55 +29,55 @@ import java.util.*;
  * shared freely across threads.
  */
 public class TopKFrequentElements {
-  public int[] topKFrequentUsingBucket(int[] nums, int k) {
-    Map<Integer, Integer> frequency = new HashMap<>();
-    for (int num : nums) {
-      frequency.put(num, frequency.getOrDefault(num, 0) + 1);
-    }
-
-    List<Integer>[] buckets = new List[nums.length + 1];
-    for (Map.Entry<Integer, Integer> entry : frequency.entrySet()) {
-      if (buckets[entry.getValue()] == null) {
-        buckets[entry.getValue()] = new ArrayList<>();
-      }
-      buckets[entry.getValue()].add(entry.getKey());
-    }
-
-    int[] topKFrequentElements = new int[k];
-    int j = 0;
-    for (int i = buckets.length - 1; i >= 0; i--) {
-      if (j >= k) break;
-      if (buckets[i] != null) {
-        for (int key : buckets[i]) {
-          if (j >= k) break;
-          topKFrequentElements[j++] = key;
+    public int[] topKFrequentUsingBucket(int[] nums, int k) {
+        Map<Integer, Integer> frequency = new HashMap<>();
+        for (int num : nums) {
+            frequency.put(num, frequency.getOrDefault(num, 0) + 1);
         }
-      }
-    }
-    return topKFrequentElements;
-  }
 
-  public int[] topKFrequentUsingHeap(int[] nums, int k) {
-    Map<Integer, Integer> frequency = new HashMap<>();
-    PriorityQueue<Map.Entry<Integer, Integer>> minHeap =
-        new PriorityQueue<>(Comparator.comparingInt(Map.Entry::getValue));
-    int[] topKFrequentElements = new int[k];
-    for (int num : nums) {
-      frequency.put(num, frequency.getOrDefault(num, 0) + 1);
+        List<Integer>[] buckets = new List[nums.length + 1];
+        for (Map.Entry<Integer, Integer> entry : frequency.entrySet()) {
+            if (buckets[entry.getValue()] == null) {
+                buckets[entry.getValue()] = new ArrayList<>();
+            }
+            buckets[entry.getValue()].add(entry.getKey());
+        }
+
+        int[] topKFrequentElements = new int[k];
+        int j = 0;
+        for (int i = buckets.length - 1; i >= 0; i--) {
+            if (j >= k) break;
+            if (buckets[i] != null) {
+                for (int key : buckets[i]) {
+                    if (j >= k) break;
+                    topKFrequentElements[j++] = key;
+                }
+            }
+        }
+        return topKFrequentElements;
     }
 
-    for (Map.Entry<Integer, Integer> entry : frequency.entrySet()) {
-      minHeap.offer(entry);
-      if (minHeap.size() > k) {
-        minHeap.poll();
-      }
-    }
+    public int[] topKFrequentUsingHeap(int[] nums, int k) {
+        Map<Integer, Integer> frequency = new HashMap<>();
+        PriorityQueue<Map.Entry<Integer, Integer>> minHeap =
+                new PriorityQueue<>(Comparator.comparingInt(Map.Entry::getValue));
+        int[] topKFrequentElements = new int[k];
+        for (int num : nums) {
+            frequency.put(num, frequency.getOrDefault(num, 0) + 1);
+        }
 
-    int i = 0;
-    while (!minHeap.isEmpty()) {
-      Map.Entry<Integer, Integer> entry = minHeap.poll();
-      topKFrequentElements[i++] = entry.getKey();
+        for (Map.Entry<Integer, Integer> entry : frequency.entrySet()) {
+            minHeap.offer(entry);
+            if (minHeap.size() > k) {
+                minHeap.poll();
+            }
+        }
+
+        int i = 0;
+        while (!minHeap.isEmpty()) {
+            Map.Entry<Integer, Integer> entry = minHeap.poll();
+            topKFrequentElements[i++] = entry.getKey();
+        }
+        return topKFrequentElements;
     }
-    return topKFrequentElements;
-  }
 }

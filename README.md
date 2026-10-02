@@ -34,6 +34,7 @@ and portfolio for understanding how these structures work under the hood.
     - [Replay Buffer](#replay-buffer)
     - [Authentication Manager](#authentication-manager)
     - [Logger](#logger)
+    - [Time Map](#time-map)
 - [Building](#building)
 - [Running Tests](#running-tests)
     - [Test Strategy](#test-strategy)
@@ -60,6 +61,7 @@ in [Data Structures](#data-structures).
 | [`replaybuffer`](src/main/java/dev/aahmedlab/replaybuffer)       | [`ReplayBuffer`](src/main/java/dev/aahmedlab/replaybuffer/ReplayBuffer.java), [`Message`](src/main/java/dev/aahmedlab/replaybuffer/ReplayBuffer.java)                                                                                                                                                                                                                                                                                                                                                                                                                                                                           | [Replay Buffer](#replay-buffer)                     |
 | [`authmanager`](src/main/java/dev/aahmedlab/authmanager)         | [`AuthenticationManager`](src/main/java/dev/aahmedlab/authmanager/AuthenticationManager.java)                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                   | [Authentication Manager](#authentication-manager)   |
 | [`logging`](src/main/java/dev/aahmedlab/logging)                 | [`Logger`](src/main/java/dev/aahmedlab/logging/Logger.java), [`LogMessage`](src/main/java/dev/aahmedlab/logging/LogMessage.java), [`Appender`](src/main/java/dev/aahmedlab/logging/Appender.java), [`MemoryAppender`](src/main/java/dev/aahmedlab/logging/MemoryAppender.java), [`Formatter`](src/main/java/dev/aahmedlab/logging/Formatter.java), [`SimpleFormatter`](src/main/java/dev/aahmedlab/logging/SimpleFormatter.java)                                                                                                                                                                                                | [Logger](#logger)                                   |
+| [`timemap`](src/main/java/dev/aahmedlab/timemap)                 | [`TimeMap`](src/main/java/dev/aahmedlab/timemap/TimeMap.java), [`Entry`](src/main/java/dev/aahmedlab/timemap/Entry.java)                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                        | [Time Map](#time-map)                               |
 
 ## Data Structures
 
@@ -144,6 +146,14 @@ in [Data Structures](#data-structures).
 - **Appender** / **MemoryAppender**: Output interface, plus an implementation that formats messages and keeps them in
   memory
 - **Formatter** / **SimpleFormatter**: Formatting interface, plus an implementation that renders `[LEVEL] message`
+
+### Time Map
+
+- **TimeMap**: Key-value store that keeps every value set for a key along with its timestamp. `get(key, t)` returns
+  the value with the latest timestamp at or before `t`, or `""` if there is none. Each key's entries are kept in an
+  append-only list and searched with binary search, so timestamps for a key must be set in increasing order. O(1)
+  set, O(log n) get
+- **Entry**: Immutable record pairing a timestamp with its value
 
 ## Building
 

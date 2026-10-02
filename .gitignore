@@ -38,3 +38,4 @@ build/
 ### AI assistants ###
 .claude/
 .codex/
+.mcp.json

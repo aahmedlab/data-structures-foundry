@@ -37,14 +37,24 @@ jobs:
           elif [ "$pct" -ge 60 ]; then color=yellow
           elif [ "$pct" -ge 50 ]; then color=orange
           else color=red; fi
-          mkdir -p .github/badges
+          mkdir -p badge
           printf '{"schemaVersion":1,"label":"coverage","message":"%s%%","color":"%s"}\n' "$pct" "$color" \
-            > .github/badges/coverage.json
+            > badge/coverage.json
           echo "Coverage: ${pct}% (${color})"
 
-      - name: Commit coverage badge data
+      # main is protected by a ruleset (PR + required "build" check), so the badge can't be
+      # committed there. Publish it as the only commit on a separate "badges" branch instead;
+      # the README badge reads it from there. Force-pushing a fresh root commit keeps that
+      # branch at one commit instead of growing a history of badge updates.
+      - name: Publish coverage badge
         if: github.event_name == 'push'
-        uses: stefanzweifel/git-auto-commit-action@v7
-        with:
-          commit_message: 'Update coverage badge [skip ci]'
-          file_pattern: '.github/badges/coverage.json'
+        working-directory: badge
+        env:
+          GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+        run: |
+          git init -q -b badges
+          git add coverage.json
+          git -c user.name='github-actions[bot]' \
+              -c user.email='41898282+github-actions[bot]@users.noreply.github.com' \
+              commit -q -m "Coverage badge for ${GITHUB_SHA::7}"
+          git push -q -f "https://x-access-token:${GITHUB_TOKEN}@github.com/${GITHUB_REPOSITORY}.git" badges

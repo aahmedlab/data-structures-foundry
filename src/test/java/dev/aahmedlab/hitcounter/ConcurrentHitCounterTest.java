@@ -674,7 +674,16 @@ class ConcurrentHitCounterTest {
     endLatch.await(10, TimeUnit.SECONDS);
     executor.shutdown();
 
-    int totalHits = counter.getHit(timestamp2);
-    assertTrue(totalHits > 0, "Expected some hits but was " + totalHits);
+    // timestamp1 and timestamp2 share a bucket (both % CAPACITY == 0), and a new timestamp
+    // overwrites the slot, so whichever timestamp is written last survives; that depends on
+    // scheduling. Querying at timestamp2 would expire a surviving timestamp1 run (diff == CAPACITY)
+    // and report 0, so query at timestamp1, where neither survivor expires. The survivor is the
+    // accumulated hits of one timestamp: at least one, at most every hit for that timestamp.
+    int surviving = counter.getHit(timestamp1);
+    int maxForOneTimestamp = (numThreads / 2) * hitsPerThread;
+    assertTrue(
+        surviving >= 1 && surviving <= maxForOneTimestamp,
+        "colliding timestamps overwrite one slot; the survivor must be one timestamp's hits but was "
+            + surviving);
   }
 }

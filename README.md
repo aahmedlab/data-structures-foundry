@@ -30,6 +30,10 @@ and portfolio for understanding how these structures work under the hood.
     - [Rate Limiter](#rate-limiter)
     - [Hash Map](#hash-map)
     - [Autocomplete](#autocomplete)
+    - [AVL Tree](#avl-tree)
+    - [Replay Buffer](#replay-buffer)
+    - [Authentication Manager](#authentication-manager)
+    - [Logger](#logger)
 - [Building](#building)
 - [Running Tests](#running-tests)
     - [Test Strategy](#test-strategy)
@@ -52,6 +56,10 @@ in [Data Structures](#data-structures).
 | [`ratelimiter`](src/main/java/dev/aahmedlab/ratelimiter)         | [`TokenBucket`](src/main/java/dev/aahmedlab/ratelimiter/TokenBucket.java), [`ConcurrentTokenBucket`](src/main/java/dev/aahmedlab/ratelimiter/ConcurrentTokenBucket.java), [`LockFreeTokenBucket`](src/main/java/dev/aahmedlab/ratelimiter/LockFreeTokenBucket.java), [`FixedWindow`](src/main/java/dev/aahmedlab/ratelimiter/FixedWindow.java), [`ConcurrentFixedWindow`](src/main/java/dev/aahmedlab/ratelimiter/ConcurrentFixedWindow.java), [`SlidingWindowLog`](src/main/java/dev/aahmedlab/ratelimiter/SlidingWindowLog.java), [`SlidingWindowCounter`](src/main/java/dev/aahmedlab/ratelimiter/SlidingWindowCounter.java) | [Rate Limiter](#rate-limiter)                       |
 | [`map`](src/main/java/dev/aahmedlab/map)                         | [`ChainingHashMap`](src/main/java/dev/aahmedlab/map/ChainingHashMap.java), [`Node`](src/main/java/dev/aahmedlab/map/Node.java)                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                  | [Hash Map](#hash-map)                               |
 | [`autocomplete`](src/main/java/dev/aahmedlab/autocomplete)       | [`Autocomplete`](src/main/java/dev/aahmedlab/autocomplete/Autocomplete.java), [`TrieNode`](src/main/java/dev/aahmedlab/autocomplete/TrieNode.java), [`Entry`](src/main/java/dev/aahmedlab/autocomplete/Entry.java)                                                                                                                                                                                                                                                                                                                                                                                                              | [Autocomplete](#autocomplete)                       |
+| [`tree`](src/main/java/dev/aahmedlab/tree)                       | [`AVLTree`](src/main/java/dev/aahmedlab/tree/AVLTree.java), [`AVLNode`](src/main/java/dev/aahmedlab/tree/AVLNode.java)                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                          | [AVL Tree](#avl-tree)                               |
+| [`replaybuffer`](src/main/java/dev/aahmedlab/replaybuffer)       | [`ReplayBuffer`](src/main/java/dev/aahmedlab/replaybuffer/ReplayBuffer.java), [`Message`](src/main/java/dev/aahmedlab/replaybuffer/ReplayBuffer.java)                                                                                                                                                                                                                                                                                                                                                                                                                                                                           | [Replay Buffer](#replay-buffer)                     |
+| [`authmanager`](src/main/java/dev/aahmedlab/authmanager)         | [`AuthenticationManager`](src/main/java/dev/aahmedlab/authmanager/AuthenticationManager.java)                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                   | [Authentication Manager](#authentication-manager)   |
+| [`logging`](src/main/java/dev/aahmedlab/logging)                 | [`Logger`](src/main/java/dev/aahmedlab/logging/Logger.java), [`LogMessage`](src/main/java/dev/aahmedlab/logging/LogMessage.java), [`Appender`](src/main/java/dev/aahmedlab/logging/Appender.java), [`MemoryAppender`](src/main/java/dev/aahmedlab/logging/MemoryAppender.java), [`Formatter`](src/main/java/dev/aahmedlab/logging/Formatter.java), [`SimpleFormatter`](src/main/java/dev/aahmedlab/logging/SimpleFormatter.java)                                                                                                                                                                                                | [Logger](#logger)                                   |
 
 ## Data Structures
 
@@ -107,6 +115,36 @@ in [Data Structures](#data-structures).
   its prefix
 - **Entry**: Immutable record pairing a word with its frequency
 
+### AVL Tree
+
+- **AVLTree**: Self-balancing binary search tree keyed by any `Comparable` type. Owns the root and all operations:
+  recursive insert (upserts on a duplicate key), delete (replaces a two-child node with its in-order successor), and
+  single/double rotations that keep every node's balance factor within ±1. O(log n) insert/delete
+- **AVLNode**: Plain data holder for the key, value, cached height, and left/right children
+
+### Replay Buffer
+
+- **ReplayBuffer**: Fixed-capacity circular buffer of sequenced messages. Sequences must be appended contiguously; once
+  full, each append overwrites the oldest message. `replay(from, to)` returns an inclusive range in order, or throws
+  `NoSuchElementException` if any part of it has been evicted or not yet written
+- **Message**: Immutable record pairing a sequence number with its payload
+
+### Authentication Manager
+
+- **AuthenticationManager**: Token store with a fixed time-to-live. `generate` issues or resets a token, `renew` extends
+  only unexpired tokens, and `countUnexpiredTokens` reports live tokens. Uses a HashMap as the source of truth for each
+  token's expiry plus a min-heap of expiry records that is cleaned up lazily, so renewals never search the heap. O(log n)
+  generate/renew, amortized O(log n) count
+
+### Logger
+
+- **Logger**: Level-filtered logger (DEBUG < INFO < WARN < ERROR, default INFO) that fans each accepted message out to
+  every registered appender
+- **LogMessage**: Immutable log record holding the level, its numeric rank, and the message text
+- **Appender** / **MemoryAppender**: Output interface, plus an implementation that formats messages and keeps them in
+  memory
+- **Formatter** / **SimpleFormatter**: Formatting interface, plus an implementation that renders `[LEVEL] message`
+
 ## Building
 
 ```bash
@@ -139,6 +177,8 @@ Each implementation is verified with a layered set of scenarios:
     - *No lost updates*: every request is accounted for as either allowed or denied (allowed + denied == total
       requests).
     - *Parameterized sweeps*: `@ParameterizedTest` runs the same concurrent checks across a range of capacities.
+- **Structural invariants** (`AVLTree`): after each operation the tests walk the whole tree to check key ordering, cached
+  heights, and balance factors, and seeded randomized runs compare the tree's contents against `java.util.TreeMap`.
 - **Single-threaded variants** (e.g. `FixedWindow`) are intentionally tested without concurrency assertions, since they
   make no thread-safety guarantees.
 

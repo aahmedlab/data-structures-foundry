@@ -69,11 +69,15 @@ public class LRU {
       if (cache.size() > capacity) {
         Node<Integer, Integer> lru = tail.getPrev(); // Least recently used (rightmost)
         if (lru != null) {
-          removeNode(lru);
-          cache.remove(lru.getKey());
+          delete(lru);
         }
       }
     }
+  }
+
+  private void delete(Node<Integer, Integer> node) {
+    removeNode(node);
+    cache.remove(node.getKey());
   }
 
   // Move existing node to head (mark as recently used)

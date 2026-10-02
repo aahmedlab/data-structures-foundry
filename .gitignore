@@ -34,3 +34,8 @@ build/
 
 ### Mac OS ###
 .DS_Store
+
+### AI assistants ###
+.claude/
+.codex/
+.mcp.json
